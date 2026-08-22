@@ -8,6 +8,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ReviewMemory.Cli.Tests/ReviewMemory.Cli.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Core.Tests/ReviewMemory.Core.Tests.csproj" />
+    <Project Path="tests/ReviewMemory.GitHub.Tests/ReviewMemory.GitHub.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Storage.Tests/ReviewMemory.Storage.Tests.csproj" />
   </Folder>
 </Solution>

@@ -6,7 +6,7 @@
 |---|---|
 | Runtime | .NET 10 (`net10.0`) |
 | CLI | System.CommandLine `3.0.0-preview.7.26381.103` |
-| Cliente GitHub | Octokit `14.0.0` (API REST v3) |
+| Cliente GitHub | Octokit `14.0.0` (API REST v3) · cliente GraphQL v4 propio (`HttpClient` + System.Text.Json, sin dependencias nuevas) |
 | Persistencia | Npgsql `10.0.3` sobre PostgreSQL 17 (full-text search nativo) |
 | Tests | xUnit `2.9.3` + Microsoft.NET.Test.Sdk `17.14.1`, coverlet.collector `6.0.4` |
 | Frontend | ninguno: CLI con salida `console` y `json` para agentes |
@@ -119,6 +119,7 @@ reviewmemory index owner/name --last N
      GET /pulls/{n}/files     → PullRequestFileData[] (+ patch → hunks)
      GET /pulls/{n}/comments  → PullRequestReviewComment[]
      BuildThreads()           → cadenas in_reply_to → ReviewThreadData[]
+     GraphQL reviewThreads    → isResolved por hilo (ver Reconstrucción de hilos)
    ↓ PullRequestData                       (record de Core)
     ↓ IndexRepository.UpsertAsync           UNA transacción por PR:
         UPSERT pull_requests                ON CONFLICT (repo, number)
@@ -177,6 +178,43 @@ discusiones lo hace `BuildThreads`:
 Un comentario cuya raíz no aparece en la respuesta (cadena rota) se descarta en
 lugar de inventar un hilo nuevo.
 
+### Estado resolved vía GraphQL
+
+El flag `isResolved` solo existe en GraphQL v4. Tras cargar un PR por REST, la
+fuente consulta `pullRequest.reviewThreads(first: 100)` con paginación por
+`pageInfo` y sobrescribe `Resolved` antes de persistir:
+
+```graphql
+query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes { isResolved comments(first: 1) { nodes { databaseId } } }
+      }
+    }
+  }
+}
+```
+
+- **Cruce de ids.** El nodo GraphQL trae un id opaco (`PRRT_…`) que no coincide
+  con el id numérico de `ReviewThreadData.Id`. Cada hilo pide su primer
+  comentario —la conexión llega en orden cronológico y el primero es el que
+  abrió el hilo— y se cruza por su `databaseId`, el mismo id numérico que REST
+  v3 usa para ese comentario. Hilos sin cruce conservan `false`.
+- **Token requerido.** El cliente GraphQL solo funciona con token; sin él no
+  se consulta.
+- **Degradación.** Ante token ausente, fallo HTTP o rate limit, la ingesta
+  continúa con `Resolved = false` y exit 0. La responsabilidad vive en
+  `GitHubPullRequestSource` —es quien puede mantener vivo el stream de PRs—,
+  que reporta el motivo una sola vez por corrida (tras el primer fallo no se
+  reintenta); el CLI lo presenta como
+  `aviso: no se pudo obtener resolved vía GraphQL: <motivo>` en stderr.
+  El cliente (`GitHubGraphQLClient`) lanza excepciones tipadas; nunca traga
+  fallos por su cuenta.
+- **La inferencia no cambia.** `resolved` se persiste pero sigue sin
+  participar en `DecisionInferrer` (ver 05-decisiones §Limitaciones).
+
 ## Migraciones embebidas
 
 Sin herramientas externas ni scripts sueltos:
@@ -192,7 +230,7 @@ Añadir un cambio de esquema = crear `002_lo_que_sea.sql` en `Migrations/`. Nada
 
 | Limitación | Detalle |
 |---|---|
-| `resolved` siempre `false` | REST v3 no expone `isResolved` de los review threads. La columna existe y el modelo la transporta, pero hoy ningún dato la pone en `true`. |
+| ~~`resolved` siempre `false`~~ resuelta | Desde este PR `resolved` se llena vía GraphQL (`pullRequest.reviewThreads`); requiere token de GitHub y degrada a `false` con un aviso en stderr si la consulta no está disponible (ver Reconstrucción de hilos §Estado resolved). |
 | ~~Re-index borra y recrea hilos del PR~~ — resuelto | Conciliación incremental por id + hash de contenido: los hilos sin cambio no se reescriben y una decisión `confidence = 'manual'` sobrevive a cualquier re-indexado. Mecanismo en «Re-indexado incremental» (Flujo de ingesta). |
 | Cadenas huérfanas descartadas | Si la raíz de un hilo no viene en la respuesta REST, toda la discusión se pierde silenciosamente. |
 | Sub-recursos sin paginación explícita | `files` y `comments` se piden sin `ApiOptions`; un PR con más de una página puede quedar incompleto. |

@@ -6,21 +6,45 @@ namespace ReviewMemory.GitHub;
 
 /// <summary>
 /// Fuente de historial basada en la API REST de GitHub. Reconstruye los
-/// hilos de review agrupando comentarios por su cadena de in_reply_to;
-/// el estado "resolved" del hilo no está disponible vía REST y llega false.
+/// hilos de review agrupando comentarios por su cadena de in_reply_to y
+/// sobrescribe su estado resolved con una consulta GraphQL complementaria.
+///
+/// La degradación vive aquí (y no en el CLI): ante token ausente o fallo de
+/// GraphQL la fuente continúa con Resolved=false para que el stream de PRs
+/// nunca se aborte, e informa el motivo una sola vez a través del callback
+/// <c>graphQlDegraded</c>; el CLI decide cómo presentarlo (stderr).
+/// Tras el primer fallo no se reintenta en el resto de la corrida.
 /// </summary>
 public sealed class GitHubPullRequestSource : IPullRequestSource
 {
-    private readonly GitHubClient _client;
+    private static readonly IReadOnlyDictionary<long, bool> NoResolvedStates =
+        new Dictionary<long, bool>();
 
-    public GitHubPullRequestSource(string? token)
+    private readonly GitHubClient _client;
+    private readonly GitHubGraphQLClient? _graphQl;
+    private readonly Action<string>? _graphQlDegraded;
+    private bool _degradationReported;
+
+    public GitHubPullRequestSource(string? token, Action<string>? graphQlDegraded = null)
+        : this(token, graphQlDegraded, CreateGraphQlClient(token))
+    {
+    }
+
+    internal GitHubPullRequestSource(
+        string? token, Action<string>? graphQlDegraded, GitHubGraphQLClient? graphQl)
     {
         _client = new GitHubClient(new ProductHeaderValue("review-memory"));
         if (!string.IsNullOrWhiteSpace(token))
         {
             _client.Credentials = new Credentials(token);
         }
+
+        _graphQlDegraded = graphQlDegraded;
+        _graphQl = graphQl;
     }
+
+    private static GitHubGraphQLClient? CreateGraphQlClient(string? token) =>
+        string.IsNullOrWhiteSpace(token) ? null : new GitHubGraphQLClient(token);
 
     public async IAsyncEnumerable<PullRequestData> GetRecentPullRequestsAsync(
         string owner,
@@ -66,6 +90,7 @@ public sealed class GitHubPullRequestSource : IPullRequestSource
     {
         var files = await _client.PullRequest.Files(owner, name, pullRequest.Number);
         var comments = await _client.PullRequest.ReviewComment.GetAll(owner, name, pullRequest.Number);
+        var resolvedStates = await ResolvedStatesOrEmptyAsync(owner, name, pullRequest.Number, cancellationToken);
 
         return new PullRequestData(
             Repo: $"{owner}/{name}",
@@ -78,8 +103,55 @@ public sealed class GitHubPullRequestSource : IPullRequestSource
             UpdatedAt: pullRequest.UpdatedAt,
             MergedAt: pullRequest.MergedAt,
             Files: [.. files.Select(MapFile)],
-            Threads: BuildThreads(comments));
+            Threads: WithResolved(BuildThreads(comments), resolvedStates));
     }
+
+    /// <summary>
+    /// Estado resolved vía GraphQL; diccionario vacío si no hay token o la
+    /// consulta falla (motivo reportado una sola vez por el callback).
+    /// </summary>
+    internal async Task<IReadOnlyDictionary<long, bool>> ResolvedStatesOrEmptyAsync(
+        string owner, string name, int number, CancellationToken cancellationToken = default)
+    {
+        if (_degradationReported)
+        {
+            return NoResolvedStates;
+        }
+
+        if (_graphQl is null)
+        {
+            ReportDegradation("no hay token de GitHub (--token o GITHUB_TOKEN)");
+            return NoResolvedStates;
+        }
+
+        try
+        {
+            return await _graphQl.GetResolvedByRootCommentAsync(owner, name, number, cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested &&
+                                   ex is HttpRequestException or TaskCanceledException or GitHubGraphQlException)
+        {
+            ReportDegradation(ex.Message);
+            return NoResolvedStates;
+        }
+    }
+
+    private void ReportDegradation(string reason)
+    {
+        _degradationReported = true;
+        _graphQlDegraded?.Invoke(reason);
+    }
+
+    internal static IReadOnlyList<ReviewThreadData> WithResolved(
+        IReadOnlyList<ReviewThreadData> threads, IReadOnlyDictionary<long, bool> resolvedByRootCommentId) =>
+        resolvedByRootCommentId.Count == 0
+            ? threads
+            :
+            [
+                .. threads.Select(thread => resolvedByRootCommentId.TryGetValue(thread.Id, out var resolved)
+                    ? thread with { Resolved = resolved }
+                    : thread),
+            ];
 
     private static PrState MapState(Octokit.PullRequest pullRequest) =>
         pullRequest.Merged ? PrState.Merged

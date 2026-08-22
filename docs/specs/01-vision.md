@@ -71,7 +71,7 @@ Verificable contra el README y el código actual:
 - Se construyó la solución `Cli · Core · GitHub · Storage` con tests (xUnit) y CI que compila y corre los tests contra Postgres real.
 - Se implementó la ingesta por REST de GitHub: PRs, archivos tocados, hunks y comentarios agrupados en hilos.
 - Se creó el esquema PostgreSQL con migraciones embebidas versionadas en `schema_migrations`.
-- Se implementó el ranking sin IA con tres señales combinadas —FTS sobre comentario y ruta (`tsvector`, índice GIN), solapamiento de archivos y recencia con vida media de 120 días—, pesos 0.55/0.30/0.15 y bandas HIGH ≥ 0.65, MEDIUM ≥ 0.40 (ver spec 03-recuperacion).
+- Se implementó el ranking sin IA con tres señales combinadas —FTS sobre comentario y ruta (`tsvector`, índice GIN), solapamiento de archivos y recencia exponencial con constante temporal de 120 días (mitad real ≈ 83 días)—, pesos 0.55/0.30/0.15 y bandas HIGH ≥ 0.65, MEDIUM ≥ 0.40 (ver spec 03-recuperacion).
 - Se infirió la decisión de cada hilo (`accepted`/`rejected`/`partially_accepted`/`unknown`) con señales léxicas deterministas; señales contradictorias quedan como `unknown` en vez de adivinar (ver spec 05-decisiones).
 - Se publicaron los comandos `index`, `search` y `context` con salida `console` y `json` equivalentes; `context` excluye las discusiones del propio PR (ver spec 04-cli).
 
@@ -90,7 +90,7 @@ Medible con datos propios, sin terceros:
 
 - **Cobertura de precedentes**: porcentaje de los comentarios de una review nueva que ya tenían precedente recuperable (hit en banda HIGH o MEDIUM) en la memoria. Si la memoria funciona, los findings repetibles deberían aparecer con precedente; los genuinamente nuevos, no.
 - **Recall@k manual sobre reviews pasadas**: para una muestra de PRs ya revisados y mergeados, ejecutar `context` (que ya excluye los hilos del propio PR) y verificar si las preocupaciones que realmente surgieron aparecen en el top-k de resultados. Procedimiento manual, k inicial = 5.
-- **Consumo real por un agente** (etapa 2): al menos un reviewer no autoriado del proyecto —humano o agente— completa reviews consultando la memoria de forma regular. Es binario y observable, no una métrica de vanidad.
+- **Consumo real por un agente** (etapa 2): al menos un consumidor externo al proyecto —humano o agente— completa reviews consultando la memoria de forma regular. Es binario y observable, no una métrica de vanidad.
 
 Estas medidas calibran los umbrales de la etapa 2; esta spec fija el método, no cifras arbitrarias.
 

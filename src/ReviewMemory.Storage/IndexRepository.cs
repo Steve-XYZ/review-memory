@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Npgsql;
 using ReviewMemory.Core;
 using ReviewMemory.Core.Decisions;
@@ -7,8 +10,13 @@ namespace ReviewMemory.Storage;
 public sealed class IndexRepository(NpgsqlDataSource dataSource)
 {
     /// <summary>
-    /// Indexa o re-indexa un PR completo de forma transaccional.
-    /// Devuelve cuántas discusiones y decisiones se almacenaron.
+    /// Indexa o re-indexa un PR completo de forma transaccional, conciliando
+    /// los hilos entrantes contra los existentes por id de GitHub y hash de
+    /// contenido: inserta nuevos, actualiza modificados (con sus comentarios),
+    /// deja intactos los sin cambio y borra los que ya no existen en GitHub.
+    /// La inferencia de decisión solo corre sobre hilos nuevos o modificados
+    /// y nunca sobrescribe una decisión manual. Devuelve cuántas discusiones
+    /// quedaron almacenadas y cuántas decisiones con desenlace tiene el PR.
     /// </summary>
     public async Task<(int Threads, int Decisions)> UpsertAsync(
         PullRequestData pullRequest, CancellationToken cancellationToken = default)
@@ -16,24 +24,62 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var decisions = 0;
-
         await UpsertPullRequestAsync(connection, transaction, pullRequest, cancellationToken);
         await ReplaceFilesAsync(connection, transaction, pullRequest, cancellationToken);
-        await DeleteThreadsAsync(connection, transaction, pullRequest, cancellationToken);
+
+        var existingHashes = await LoadThreadHashesAsync(
+            connection, transaction, pullRequest, cancellationToken);
+        await DeleteThreadsNotInAsync(
+            connection, transaction, pullRequest,
+            pullRequest.Threads.Select(t => t.Id).ToArray(), cancellationToken);
+
+        var added = new List<(ReviewThreadData Thread, string Hash)>();
+        var changed = new List<(ReviewThreadData Thread, string Hash)>();
 
         foreach (var thread in pullRequest.Threads)
         {
-            await InsertThreadAsync(connection, transaction, pullRequest, thread, cancellationToken);
-            await InsertCommentsAsync(connection, transaction, thread, cancellationToken);
-
-            var decision = DecisionInferrer.Infer(thread);
-            await UpsertDecisionAsync(connection, transaction, thread.Id, decision, cancellationToken);
-            if (decision.Outcome is not DecisionOutcome.Unknown)
+            var hash = ContentHash(thread);
+            if (existingHashes.TryGetValue(thread.Id, out var currentHash))
             {
-                decisions++;
+                if (currentHash != hash)
+                {
+                    changed.Add((thread, hash));
+                }
+            }
+            else
+            {
+                added.Add((thread, hash));
             }
         }
+
+        foreach (var (thread, hash) in added)
+        {
+            await InsertThreadAsync(connection, transaction, pullRequest, thread, hash, cancellationToken);
+        }
+
+        foreach (var (thread, hash) in changed)
+        {
+            await UpdateThreadAsync(connection, transaction, thread, hash, cancellationToken);
+        }
+
+        foreach (var (thread, _) in changed)
+        {
+            await DeleteCommentsAsync(connection, transaction, thread.Id, cancellationToken);
+        }
+
+        foreach (var (thread, _) in added.Concat(changed))
+        {
+            await InsertCommentsAsync(connection, transaction, thread, cancellationToken);
+
+            if (!await IsManualDecisionAsync(connection, transaction, thread.Id, cancellationToken))
+            {
+                var decision = DecisionInferrer.Infer(thread);
+                await UpsertDecisionAsync(connection, transaction, thread.Id, decision, cancellationToken);
+            }
+        }
+
+        var decisions = await CountDecisionsWithOutcomeAsync(
+            connection, transaction, pullRequest, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
         return (pullRequest.Threads.Count, decisions);
@@ -123,24 +169,58 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         }
     }
 
-    private static async Task DeleteThreadsAsync(
+    private static async Task<Dictionary<long, string?>> LoadThreadHashesAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction,
         PullRequestData pr, CancellationToken cancellationToken)
     {
-        const string sql = "DELETE FROM review_threads WHERE pr_repo = @repo AND pr_number = @number";
+        const string sql = """
+            SELECT id, content_hash
+            FROM review_threads
+            WHERE pr_repo = @repo AND pr_number = @number
+            """;
+
+        var hashes = new Dictionary<long, string?>();
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("repo", pr.Repo);
         command.Parameters.AddWithValue("number", pr.Number);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hashes.Add(reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1));
+        }
+
+        return hashes;
+    }
+
+    /// <summary>
+    /// Borra los hilos del PR ausentes del listado entrante (la cascada elimina
+    /// sus comentarios y decisiones); con la lista vacía borra todos.
+    /// </summary>
+    private static async Task DeleteThreadsNotInAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        PullRequestData pr, long[] keepIds, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            DELETE FROM review_threads
+            WHERE pr_repo = @repo AND pr_number = @number AND id <> ALL(@ids)
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("repo", pr.Repo);
+        command.Parameters.AddWithValue("number", pr.Number);
+        command.Parameters.AddWithValue("ids", keepIds);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task InsertThreadAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction,
-        PullRequestData pr, ReviewThreadData thread, CancellationToken cancellationToken)
+        PullRequestData pr, ReviewThreadData thread, string contentHash,
+        CancellationToken cancellationToken)
     {
         const string sql = """
-            INSERT INTO review_threads (id, pr_repo, pr_number, path, line, resolved, author, finding, created_at)
-            VALUES (@id, @repo, @number, @path, @line, @resolved, @author, @finding, @created_at)
+            INSERT INTO review_threads (id, pr_repo, pr_number, path, line, resolved, author, finding, created_at, content_hash)
+            VALUES (@id, @repo, @number, @path, @line, @resolved, @author, @finding, @created_at, @content_hash)
             """;
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
@@ -153,6 +233,41 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         command.Parameters.AddWithValue("author", thread.Finding.Author);
         command.Parameters.AddWithValue("finding", thread.Finding.Body);
         command.Parameters.AddWithValue("created_at", thread.Finding.CreatedAt);
+        command.Parameters.AddWithValue("content_hash", contentHash);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpdateThreadAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        ReviewThreadData thread, string contentHash, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE review_threads
+            SET path = @path, line = @line, resolved = @resolved,
+                author = @author, finding = @finding, created_at = @created_at,
+                content_hash = @content_hash
+            WHERE id = @id
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("id", thread.Id);
+        command.Parameters.AddWithValue("path", thread.Path);
+        command.Parameters.AddWithValue("line", thread.Line ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("resolved", thread.Resolved);
+        command.Parameters.AddWithValue("author", thread.Finding.Author);
+        command.Parameters.AddWithValue("finding", thread.Finding.Body);
+        command.Parameters.AddWithValue("created_at", thread.Finding.CreatedAt);
+        command.Parameters.AddWithValue("content_hash", contentHash);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task DeleteCommentsAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        long threadId, CancellationToken cancellationToken)
+    {
+        const string sql = "DELETE FROM review_comments WHERE thread_id = @thread_id";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("thread_id", threadId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -178,6 +293,35 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         }
     }
 
+    /// <summary>Indica si el hilo ya tiene una decisión corregida por un humano.</summary>
+    private static async Task<bool> IsManualDecisionAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        long threadId, CancellationToken cancellationToken)
+    {
+        const string sql = "SELECT confidence FROM decisions WHERE thread_id = @thread_id";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("thread_id", threadId);
+        var confidence = await command.ExecuteScalarAsync(cancellationToken);
+        return confidence is "manual";
+    }
+
+    private static async Task<int> CountDecisionsWithOutcomeAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        PullRequestData pr, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT COUNT(*)
+            FROM decisions d
+            JOIN review_threads t ON t.id = d.thread_id
+            WHERE t.pr_repo = @repo AND t.pr_number = @number AND d.outcome <> 'unknown'
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("repo", pr.Repo);
+        command.Parameters.AddWithValue("number", pr.Number);
+        return (int)(long)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
     private static async Task UpsertDecisionAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction,
         long threadId, Decision decision, CancellationToken cancellationToken)
@@ -199,6 +343,39 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         command.Parameters.AddWithValue("confidence", decision.Confidence is DecisionConfidence.Manual ? "manual" : "inferred");
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// SHA256 en hex minúscula del contenido visible del hilo; permite detectar
+    /// cambios entre indexaciones sin ids ni timestamps. Formato determinista
+    /// "reviewmemory-thread-v1": campos separados por '\n' con '\' escapado como
+    /// '\\', '\r' como '\r' y '\n' como '\n'. Campos en orden: versión, path,
+    /// line (vacía si es null), resolved ("true"/"false"), autor y cuerpo del
+    /// finding, y luego autor y cuerpo de cada respuesta ordenada por CreatedAt
+    /// (empate: Id).
+    /// </summary>
+    private static string ContentHash(ReviewThreadData thread)
+    {
+        IEnumerable<string> Fields()
+        {
+            yield return "reviewmemory-thread-v1";
+            yield return Escape(thread.Path);
+            yield return thread.Line?.ToString(CultureInfo.InvariantCulture) ?? "";
+            yield return thread.Resolved ? "true" : "false";
+            yield return Escape(thread.Finding.Author);
+            yield return Escape(thread.Finding.Body);
+            foreach (var reply in thread.Replies.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id))
+            {
+                yield return Escape(reply.Author);
+                yield return Escape(reply.Body);
+            }
+        }
+
+        var canonical = string.Join('\n', Fields());
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+    }
+
+    private static string Escape(string value) =>
+        value.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n");
 
     private static string ToDb(PrState state) => state switch
     {

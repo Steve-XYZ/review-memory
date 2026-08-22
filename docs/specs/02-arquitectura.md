@@ -30,7 +30,7 @@ review-memory/
 │   │   └── Reporting/SearchRenderer.cs
 │   ├── ReviewMemory.GitHub/          # GitHubPullRequestSource: REST → PullRequestData
 │   ├── ReviewMemory.Storage/         # IndexRepository, SearchRepository, DbMigrations
-│   │   └── Migrations/001_init.sql   # recurso embebido del ensamblado Storage
+│   │   └── Migrations/*.sql          # recursos embebidos del ensamblado Storage (001_init, 002_thread_content_hash)
 │   └── ReviewMemory.Cli/             # host System.CommandLine: index · search · context
 ├── tests/
 │   ├── ReviewMemory.Core.Tests/
@@ -120,19 +120,41 @@ reviewmemory index owner/name --last N
      GET /pulls/{n}/comments  → PullRequestReviewComment[]
      BuildThreads()           → cadenas in_reply_to → ReviewThreadData[]
    ↓ PullRequestData                       (record de Core)
-   ↓ IndexRepository.UpsertAsync           UNA transacción por PR:
-       UPSERT pull_requests                ON CONFLICT (repo, number)
-       DELETE pr_files → INSERT pr_files + code_hunks
-       DELETE review_threads               cascada: comments y decisions
-       INSERT review_threads + review_comments
-       DecisionInferrer.Infer(hilo) → UPSERT decisions
-     COMMIT
+    ↓ IndexRepository.UpsertAsync           UNA transacción por PR:
+        UPSERT pull_requests                ON CONFLICT (repo, number)
+        DELETE pr_files → INSERT pr_files + code_hunks
+        conciliación de hilos por id + content_hash (ver abajo):
+          nuevos → INSERT · modificados → UPDATE (+comments) · sin cambio → intactos
+          ausentes en GitHub → DELETE            cascada: comments y decisions
+        DecisionInferrer.Infer solo en nuevos/modificados → UPSERT decisions
+      COMMIT
 ```
 
 La transacción por PR es el límite de consistencia: si la ingesta de un PR
 falla a mitad (red, rate limit), queda o la versión previa o ninguna; nunca un
 PR con archivos sin hilos. La salida reporta por PR cuántas discusiones y
 decisiones con desenlace (`outcome ≠ unknown`) quedaron almacenadas.
+
+### Re-indexado incremental
+
+Cada hilo lleva un `content_hash` (SHA256 en hex) de su contenido visible:
+path, línea, estado `resolved`, autor y cuerpo del finding, y respuestas
+ordenadas por fecha (empate: id) con su autor y cuerpo — sin ids ni
+timestamps. El formato exacto está documentado en el código
+(`IndexRepository.ContentHash`). Al indexar un PR:
+
+- los hilos nuevos se insertan;
+- los hilos cuyo hash cambió se actualizan y sus comentarios se reescriben
+  (delete por `thread_id` + insert);
+- los hilos sin cambio no se tocan: sus filas —y sus decisiones— quedan
+  intactas;
+- los hilos que ya no existen en GitHub se borran (la cascada elimina sus
+  comentarios y decisiones).
+
+La re-inferencia de decisión corre solo para hilos nuevos o modificados, y el
+indexador la salta si el hilo ya tiene una decisión `confidence = 'manual'`:
+una corrección humana sobrevive a cualquier re-indexado. `pr_files` sigue con
+replace-all porque es íntegramente derivable de la API.
 
 La recuperación (`search`, `context`) usa `SearchRepository`: una consulta SQL
 que puntúa cada hilo con tres señales — FTS sobre `search_vec`
@@ -171,7 +193,7 @@ Añadir un cambio de esquema = crear `002_lo_que_sea.sql` en `Migrations/`. Nada
 | Limitación | Detalle |
 |---|---|
 | `resolved` siempre `false` | REST v3 no expone `isResolved` de los review threads. La columna existe y el modelo la transporta, pero hoy ningún dato la pone en `true`. |
-| Re-index borra y recrea hilos del PR | `UpsertAsync` elimina los hilos (y por cascada comentarios y decisiones) antes de reinsertarlos. El resultado final es correcto pero no conservador: una corrección manual (`decisions.confidence = 'manual'`) se pierde en el siguiente re-index. |
+| ~~Re-index borra y recrea hilos del PR~~ — resuelto | Conciliación incremental por id + hash de contenido: los hilos sin cambio no se reescriben y una decisión `confidence = 'manual'` sobrevive a cualquier re-indexado. Mecanismo en «Re-indexado incremental» (Flujo de ingesta). |
 | Cadenas huérfanas descartadas | Si la raíz de un hilo no viene en la respuesta REST, toda la discusión se pierde silenciosamente. |
 | Sub-recursos sin paginación explícita | `files` y `comments` se piden sin `ApiOptions`; un PR con más de una página puede quedar incompleto. |
 | Coordenadas de línea aproximadas | `line` guarda `Position ?? OriginalPosition` (posición en el diff). En comentarios obsoletos queda la posición original, que puede no coincidir con el archivo actual. |

@@ -132,7 +132,7 @@ Detalles:
 
 - La banda sale del score combinado (texto 0.55 + solapamiento 0.30 + recencia 0.15): `HIGH` ≥ 0.65, `MEDIUM` ≥ 0.40, si no `LOW`.
 - `Similitud` es el score con dos decimales.
-- La primera línea del título de cada hit trunca a 72 caracteres con elipsis `…`.
+- La primera línea del finding de cada hit trunca a 72 caracteres con elipsis `…`; el título del PR no aparece en la salida console (solo en JSON como `prTitle`).
 - `File:` omite `:<línea>` cuando el hilo no tiene posición.
 - `Resolución:` solo aparece si el desenlace no es `unknown` o hay razón. Etiquetas: `Finding aceptado — se corrigió la implementación` / `Finding rechazado` / `Finding parcialmente aceptado` / `Desenlace desconocido`.
 

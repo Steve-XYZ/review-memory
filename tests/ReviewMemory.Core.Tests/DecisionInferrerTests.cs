@@ -93,4 +93,19 @@ public sealed class DecisionInferrerTests
 
         Assert.Equal(DecisionOutcome.Rejected, decision.Outcome);
     }
+
+    [Fact]
+    public void Reason_quote_truncates_decisive_body_at_120_visible_chars()
+    {
+        var body = "Fixed. " + new string('x', 200);
+        var thread = Thread(
+            "This retry can process the same provider transaction twice.",
+            ("dev", body));
+
+        var decision = DecisionInferrer.Infer(thread);
+
+        Assert.Equal(DecisionOutcome.Accepted, decision.Outcome);
+        Assert.NotNull(decision.Reason);
+        Assert.Contains($"respuesta de dev: \"{body[..119]}…\"", decision.Reason);
+    }
 }

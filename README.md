@@ -64,7 +64,7 @@ Sin IA. Tres señales combinadas sobre las discusiones de review indexadas:
 
 - **Full-text search**: `tsvector` generado sobre el comentario del reviewer + la ruta del archivo (`websearch_to_tsquery`, índice GIN).
 - **Solapamiento de archivos**: proporción de rutas consultadas que el PR candidato tocó.
-- **Recencia**: decaimiento exponencial con vida media de 120 días.
+- **Recencia**: decaimiento exponencial con constante temporal de 120 días (mitad del factor ≈83 días; detalle en `docs/specs/03-recuperacion.md`).
 
 Cada hilo lleva una **decisión inferida** (`accepted` / `rejected` / `partially_accepted` / `unknown`) a partir de señales léxicas deterministas en las respuestas; señales contradictorias quedan como `unknown` en lugar de adivinar.
 

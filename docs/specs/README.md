@@ -1,15 +1,15 @@
 # Specs de ReviewMemory
 
-Especificaciones por escribir, en este orden:
-
 | Spec | Contenido | Estado |
 |---|---|---|
-| 01-vision | problema, posicionamiento, objetivo por etapa | pendiente |
-| 02-arquitectura | stack, estructura de la solución, modelo de dominio, flujo de datos | pendiente |
-| 03-recuperacion | señales de ranking (FTS + solapamiento + recencia), formato de salida, contrato para agentes | pendiente |
-| 04-cli | comandos, opciones, exit codes, ejemplos | pendiente |
-| 05-decisiones | heurística de inferencia etapa 1 y plan para aprendizaje post-review | pendiente |
-| 06-roadmap | MCP server, embeddings/pgvector, integración con skills de code review | pendiente |
+| [01-vision](01-vision.md) | problema, posicionamiento, no-goals, objetivo por etapa, señales de éxito | escrita (PR #6) |
+| [02-arquitectura](02-arquitectura.md) | stack, estructura de la solución, modelo de dominio vs tablas, flujo de ingesta, limitaciones | escrita (PR #3) |
+| [03-recuperacion](03-recuperacion.md) | señales de ranking con valores exactos, semántica search vs context, formatos console/json, contrato para agentes | escrita (PR #5) |
+| [04-cli](04-cli.md) | comandos, opciones y defaults literales, exit codes, mensajes de error, ejemplos verificados | escrita (PR #4) |
+| [05-decisiones](05-decisiones.md) | catálogo de señales léxicas, orden de evaluación, restricciones de BD, aprendizaje post-review | escrita (PR #1) |
+| [06-roadmap](06-roadmap.md) | GraphQL resolved, índice incremental, MCP server, skills, pgvector, aprendizaje — compromiso vs propuesta | escrita (PR #2) |
 
-Las bases (código, esquema y CI) ya están en `src/` y `.github/`; estas specs
-documentan el comportamiento que ya existe y definen la siguiente etapa.
+Las specs documentan el comportamiento implementado en `src/` y definen los
+criterios de aceptación de la siguiente iteración de cada área. Regla de la
+serie: si una spec difiere del código, gana el código — y el PR que cambia uno
+obliga a cambiar la otra.

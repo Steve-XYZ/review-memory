@@ -6,6 +6,7 @@
     <Project Path="src/ReviewMemory.Storage/ReviewMemory.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ReviewMemory.Cli.Tests/ReviewMemory.Cli.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Core.Tests/ReviewMemory.Core.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Storage.Tests/ReviewMemory.Storage.Tests.csproj" />
   </Folder>

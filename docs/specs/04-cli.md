@@ -233,8 +233,8 @@ dotnet run --project src/ReviewMemory.Cli -- context a/b           # Option '--p
 
 ## Criterios de aceptación (siguiente iteración CLI)
 
-1. **Spec como contrato**: toda opción, default y mensaje de esta spec coincide con el binario; un smoke test que ejecute `--help` de cada comando y las cinco rutas de error anteriores debe seguir pasando tras cualquier cambio en `Program.cs`. Cambiar un mensaje obliga a actualizar esta spec en el mismo PR.
-2. **Exit codes estables**: 0 éxito, 1 parsing/tiempo de ejecución, 2 uso inválido. CI verifica los tres.
+1. **Spec como contrato**: toda opción, default y mensaje de esta spec coincide con el binario; un smoke test que ejecute `--help` de cada comando y las cinco rutas de error anteriores debe seguir pasando tras cualquier cambio en `Program.cs`. Cambiar un mensaje obliga a actualizar esta spec en el mismo PR. Cubierto por `tests/ReviewMemory.Cli.Tests`, que ejecuta el binario real como subproceso.
+2. **Exit codes estables**: 0 éxito, 1 parsing/tiempo de ejecución, 2 uso inválido. CI verifica los tres vía `dotnet test` (`tests/ReviewMemory.Cli.Tests`).
 3. **JSON estable**: mismos campos camelCase, enums como strings camelCase, nulos omitidos. Es el schema que consumirán agentes y MCP server; cambios rompientes requieren nota explícita.
 4. **`context` preserva su semántica**: excluye las discusiones del propio PR, exige `--pr`, y el header solo aparece en formato console.
 5. **Degradación sin token**: `index` funciona anónimo (60 req/h) y agota rate limit como exit 1 con `error: <mensaje>` en stderr, nunca un crash sin capturar.

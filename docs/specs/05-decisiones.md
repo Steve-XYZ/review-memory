@@ -110,7 +110,7 @@ CREATE TABLE decisions (
 );
 ```
 
-(`001_init.sql`; además `idx_decisions_outcome`.) Una decisión por hilo. El indexador persiste por hilo dentro de la misma transacción que el resto del PR: `INSERT … ON CONFLICT (thread_id) DO UPDATE` actualiza `outcome`, `reason`, `confidence` y pone `decided_at = now()`. Como `review_threads` se borra y recrea en cada re-indexado, el `ON DELETE CASCADE` elimina la decisión previa: **re-indexar siempre reinfiere desde cero**, incluso sobre una decisión manual. El contador del CLI ("decisiones con desenlace") excluye los `unknown`.
+(`001_init.sql`; además `idx_decisions_outcome`.) Una decisión por hilo. El indexador persiste por hilo dentro de la misma transacción que el resto del PR: `INSERT … ON CONFLICT (thread_id) DO UPDATE` actualiza `outcome`, `reason`, `confidence` y pone `decided_at = now()`. Desde el re-indexado incremental, los hilos sin cambio no se tocan y la inferencia solo corre sobre hilos nuevos o modificados: **re-indexar conserva las decisiones existentes**, y una fila con `confidence = 'manual'` nunca se sobrescribe — el indexador salta la inferencia para ese hilo. El contador del CLI ("decisiones con desenlace") excluye los `unknown`.
 
 ## Exposición en búsqueda
 
@@ -142,7 +142,7 @@ La razón se añade tras las etiquetas separada por ". ". El JSON serializa `out
 - Substring sin límites de palabra ni detección de negación: "not fixed" contiene `fixed` → falso `accepted`; "unfixed" igual.
 - No mira diffs posteriores, commits, ni estado del PR; `resolved` del hilo se persiste pero no participa en la inferencia.
 - Por categoría se cita solo el primer comentario que matchea, no todos.
-- Re-indexar pierde cualquier decisión `manual` (cascade + overwrite); `confidence` no aparece aún en resultados de búsqueda.
+- Re-indexar ya no pierde decisiones `manual`: comportamiento garantizado desde el re-indexado incremental — las filas de hilos sin cambio no se tocan y una fila manual nunca se sobrescribe. `confidence` no aparece aún en resultados de búsqueda.
 
 ## Etapa 2: aprendizaje post-review (propuesta, no implementada)
 
@@ -161,5 +161,5 @@ Regla de combinación propuesta: la señal más fuerte disponible decide; el lé
 Decisiones manuales:
 
 - Flujo (comando o skill de review) para fijar `outcome` con `confidence='manual'`.
-- Una decisión `manual` debe prevalecer sobre cualquier reinferencia y sobrevivir al re-indexado (hoy el cascade la borra): el indexador saltará la inferencia cuando exista fila manual, en vez de borrarla con el hilo.
+- Una decisión `manual` prevalece sobre cualquier reinferencia y sobrevive al re-indexado: comportamiento garantizado por el re-indexado incremental — el indexador salta la inferencia cuando existe fila manual y no toca esa fila.
 - Casos de uso: corregir falsos positivos del léxico ("not fixed"), registrar desenlaces que el texto no muestra, y servir como datos de entrenamiento para etapas posteriores.

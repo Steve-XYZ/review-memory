@@ -81,8 +81,236 @@ public sealed class StorageIntegrationTests
         Assert.Equal(otherThreadId, context[0].ThreadId);
     }
 
+    [Fact]
+    public async Task Reindex_del_mismo_pr_mantiene_conteos_y_hash_estable()
+    {
+        if (ConnectionString is null)
+        {
+            return;
+        }
+
+        var repo = $"smoke/{Guid.NewGuid():N}";
+        var threadId = NewThreadId();
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await DbMigrations.ApplyAsync(dataSource);
+        var index = new IndexRepository(dataSource);
+
+        var firstRun = await index.UpsertAsync(SamplePullRequest(repo, 1, threadId));
+        var first = await ReadPrStateAsync(dataSource, repo, 1);
+
+        var secondRun = await index.UpsertAsync(SamplePullRequest(repo, 1, threadId));
+        var second = await ReadPrStateAsync(dataSource, repo, 1);
+
+        Assert.Equal((Threads: 1, Decisions: 1), firstRun);
+        Assert.Equal(firstRun, secondRun);
+        Assert.Equal(
+            (first.Threads, first.Comments, first.Decisions, first.Finding, first.ContentHash),
+            (second.Threads, second.Comments, second.Decisions, second.Finding, second.ContentHash));
+        Assert.Equal(1, second.Threads);
+        Assert.Equal(2, second.Comments);
+        Assert.Equal(1, second.Decisions);
+        Assert.NotNull(second.ContentHash);
+    }
+
+    [Fact]
+    public async Task Decision_manual_sobrevive_re_index_sin_cambios()
+    {
+        if (ConnectionString is null)
+        {
+            return;
+        }
+
+        var repo = $"smoke/{Guid.NewGuid():N}";
+        var threadId = NewThreadId();
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await DbMigrations.ApplyAsync(dataSource);
+        var index = new IndexRepository(dataSource);
+
+        await index.UpsertAsync(SamplePullRequest(repo, 2, threadId));
+        await MarkDecisionManualAsync(dataSource, threadId);
+        var before = await ReadDecisionAsync(dataSource, threadId);
+        var stateBefore = await ReadPrStateAsync(dataSource, repo, 2);
+
+        await index.UpsertAsync(SamplePullRequest(repo, 2, threadId));
+        var after = await ReadDecisionAsync(dataSource, threadId);
+        var stateAfter = await ReadPrStateAsync(dataSource, repo, 2);
+
+        Assert.Equal(("rejected", "manual"), (after.Outcome, after.Confidence));
+        Assert.Equal(before, after);
+        Assert.Equal(
+            (stateBefore.Threads, stateBefore.Comments, stateBefore.Decisions,
+             stateBefore.Finding, stateBefore.ContentHash),
+            (stateAfter.Threads, stateAfter.Comments, stateAfter.Decisions,
+             stateAfter.Finding, stateAfter.ContentHash));
+    }
+
+    [Fact]
+    public async Task Hilo_modificado_se_actualiza_y_decision_se_reinfiere()
+    {
+        if (ConnectionString is null)
+        {
+            return;
+        }
+
+        var repo = $"smoke/{Guid.NewGuid():N}";
+        var threadId = NewThreadId();
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await DbMigrations.ApplyAsync(dataSource);
+        var index = new IndexRepository(dataSource);
+
+        await index.UpsertAsync(SamplePullRequest(repo, 3, threadId));
+        var before = await ReadPrStateAsync(dataSource, repo, 3);
+
+        await index.UpsertAsync(SamplePullRequest(
+            repo, 3, threadId,
+            findingBody: "This retry can process the same provider transaction twice under load.",
+            replyBody: "Not an issue: providerRequestId already enforced by a unique constraint."));
+        var after = await ReadPrStateAsync(dataSource, repo, 3);
+        var decision = await ReadDecisionAsync(dataSource, threadId);
+
+        Assert.NotEqual(before.ContentHash, after.ContentHash);
+        Assert.NotEqual(before.Finding, after.Finding);
+        Assert.Contains("twice under load", after.Finding);
+        Assert.Equal("rejected", decision.Outcome);
+        Assert.Equal("inferred", decision.Confidence);
+    }
+
+    [Fact]
+    public async Task Migracion_002_aplica_sobre_bd_con_datos_de_001()
+    {
+        if (ConnectionString is null)
+        {
+            return;
+        }
+
+        var repo = $"smoke/{Guid.NewGuid():N}";
+        var threadId = NewThreadId();
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await DbMigrations.ApplyAsync(dataSource);
+        var index = new IndexRepository(dataSource);
+        await index.UpsertAsync(SamplePullRequest(repo, 4, threadId));
+
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var drop = new NpgsqlCommand(
+                         "ALTER TABLE review_threads DROP COLUMN IF EXISTS content_hash", connection))
+        {
+            await drop.ExecuteNonQueryAsync();
+        }
+
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var forget = new NpgsqlCommand(
+                         "DELETE FROM schema_migrations WHERE name = '002_thread_content_hash.sql'", connection))
+        {
+            await forget.ExecuteNonQueryAsync();
+        }
+
+        var applied = await DbMigrations.ApplyAsync(dataSource);
+
+        Assert.Equal(["002_thread_content_hash.sql"], applied);
+
+        var stateAfterMigration = await ReadPrStateAsync(dataSource, repo, 4);
+        Assert.Null(stateAfterMigration.ContentHash);
+        Assert.Equal(threadId, stateAfterMigration.ThreadIds.Single());
+
+        await index.UpsertAsync(SamplePullRequest(repo, 4, threadId));
+        var stateAfterReindex = await ReadPrStateAsync(dataSource, repo, 4);
+        Assert.NotNull(stateAfterReindex.ContentHash);
+    }
+
     private static long NewThreadId() =>
         Random.Shared.NextInt64(1_000_000_000, long.MaxValue / 4);
+
+    private static async Task MarkDecisionManualAsync(NpgsqlDataSource dataSource, long threadId)
+    {
+        const string sql = """
+            UPDATE decisions
+            SET outcome = 'rejected',
+                reason = 'corrección humana: falso positivo del léxico',
+                confidence = 'manual'
+            WHERE thread_id = @thread_id
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("thread_id", threadId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<(
+        int Threads, int Comments, int Decisions, string? Finding,
+        string? ContentHash, IReadOnlyList<long> ThreadIds)> ReadPrStateAsync(
+        NpgsqlDataSource dataSource, string repo, int number)
+    {
+        const string sql = """
+            SELECT t.id, t.finding, t.content_hash
+            FROM review_threads t
+            WHERE t.pr_repo = @repo AND t.pr_number = @number
+            ORDER BY t.id
+            """;
+
+        var threadIds = new List<long>();
+        string? finding = null;
+        string? contentHash = null;
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(sql, connection))
+        {
+            command.Parameters.AddWithValue("repo", repo);
+            command.Parameters.AddWithValue("number", number);
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                threadIds.Add(reader.GetInt64(0));
+                finding = reader.GetString(1);
+                contentHash = reader.IsDBNull(2) ? null : reader.GetString(2);
+            }
+        }
+
+        const string countsSql = """
+            SELECT
+                (SELECT COUNT(*) FROM review_comments c
+                 JOIN review_threads t ON t.id = c.thread_id
+                 WHERE t.pr_repo = @repo AND t.pr_number = @number),
+                (SELECT COUNT(*) FROM decisions d
+                 JOIN review_threads t ON t.id = d.thread_id
+                 WHERE t.pr_repo = @repo AND t.pr_number = @number)
+            """;
+
+        int comments;
+        int decisions;
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(countsSql, connection))
+        {
+            command.Parameters.AddWithValue("repo", repo);
+            command.Parameters.AddWithValue("number", number);
+            await using var reader = await command.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            comments = (int)(long)reader.GetInt64(0);
+            decisions = (int)(long)reader.GetInt64(1);
+        }
+
+        return (threadIds.Count, comments, decisions, finding, contentHash, threadIds);
+    }
+
+    private static async Task<(string Outcome, string Confidence, string? Reason, DateTimeOffset DecidedAt)>
+        ReadDecisionAsync(NpgsqlDataSource dataSource, long threadId)
+    {
+        const string sql = """
+            SELECT outcome, confidence, reason, decided_at
+            FROM decisions
+            WHERE thread_id = @thread_id
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("thread_id", threadId);
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return (
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.GetFieldValue<DateTimeOffset>(3));
+    }
 
     private static async Task<int> CountAppliedMigrationsAsync(NpgsqlDataSource dataSource)
     {
@@ -92,7 +320,8 @@ public sealed class StorageIntegrationTests
     }
 
     private static PullRequestData SamplePullRequest(
-        string repo, int number, long? threadId = null, int line = 42)
+        string repo, int number, long? threadId = null, int line = 42,
+        string? findingBody = null, string? replyBody = null)
     {
         var id = threadId ?? Random.Shared.NextInt64(1_000_000_000, long.MaxValue / 4);
         return new PullRequestData(
@@ -121,11 +350,13 @@ public sealed class StorageIntegrationTests
                     Line: line,
                     Resolved: true,
                     Finding: new ReviewCommentData(id, "reviewer",
-                        "This retry can process the same provider transaction twice.", DateTimeOffset.UtcNow.AddDays(-30)),
+                        findingBody ?? "This retry can process the same provider transaction twice.",
+                        DateTimeOffset.UtcNow.AddDays(-30)),
                     Replies:
                     [
                         new ReviewCommentData(id + 1, "dev",
-                            "Fixed by adding an idempotency check.", DateTimeOffset.UtcNow.AddDays(-30).AddHours(2)),
+                            replyBody ?? "Fixed by adding an idempotency check.",
+                            DateTimeOffset.UtcNow.AddDays(-30).AddHours(2)),
                     ]),
             ]);
     }

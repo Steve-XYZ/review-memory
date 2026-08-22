@@ -49,7 +49,7 @@ Dirección de dependencias:
                   └────▶ Core ◀──────┘
 ```
 
-- **Cli → { Core, GitHub, Storage }**: compone los tres; parsea args y mapea a exit codes (0 éxito, 1 error de runtime, 2 uso inválido).
+- **Cli → { Core, GitHub, Storage }**: compone los tres; parsea args y mapea a exit codes (0 éxito; 1 error de parsing o runtime; 2 uso inválido detectado por el programa — detalle en 04-cli §Exit codes).
 - **GitHub → Core** y **Storage → Core**: ambos hablan el idioma del dominio.
 - **Core → nada**: cero `PackageReference` y cero `ProjectReference`. El contrato `IPullRequestSource` vive en Core, así que las pruebas pueden alimentar fuentes en memoria y una futura fuente GraphQL solo añadiría un proyecto que referencia Core.
 
@@ -137,7 +137,8 @@ decisiones con desenlace (`outcome ≠ unknown`) quedaron almacenadas.
 La recuperación (`search`, `context`) usa `SearchRepository`: una consulta SQL
 que puntúa cada hilo con tres señales — FTS sobre `search_vec`
 (`websearch_to_tsquery`), solapamiento de rutas contra `pr_files`, y recencia
-exponencial (vida media 120 días), con pesos 0.55 / 0.30 / 0.15 definidos en
+exponencial con constante temporal de 120 días (mitad del factor ≈83 días; ver
+03-recuperacion §Recency), con pesos 0.55 / 0.30 / 0.15 definidos en
 Core. `context` excluye las discusiones del propio PR. Las señales se detallan
 en `03-recuperacion.md`.
 

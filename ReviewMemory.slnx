@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ReviewMemory.Cli/ReviewMemory.Cli.csproj" />
+    <Project Path="src/ReviewMemory.Core/ReviewMemory.Core.csproj" />
+    <Project Path="src/ReviewMemory.GitHub/ReviewMemory.GitHub.csproj" />
+    <Project Path="src/ReviewMemory.Storage/ReviewMemory.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ReviewMemory.Core.Tests/ReviewMemory.Core.Tests.csproj" />
+    <Project Path="tests/ReviewMemory.Storage.Tests/ReviewMemory.Storage.Tests.csproj" />
+  </Folder>
+</Solution>

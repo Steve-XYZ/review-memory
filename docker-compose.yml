@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:17
+    container_name: review-memory-db
+    environment:
+      POSTGRES_DB: reviewmemory
+      POSTGRES_USER: reviewmemory
+      POSTGRES_PASSWORD: reviewmemory
+    ports:
+      # el 5432 local suele estar ocupado por otras BD de desarrollo
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reviewmemory -d reviewmemory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

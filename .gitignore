@@ -1,0 +1,24 @@
+## Build artifacts
+bin/
+obj/
+out/
+*.user
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+## Test results
+TestResults/
+coverage/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Local env / secrets
+.env
+.env.*
+appsettings.*.local.json

@@ -32,7 +32,7 @@ review-memory/
 │   ├── ReviewMemory.GitHub/          # GitHubPullRequestSource: REST → PullRequestData
 │   ├── ReviewMemory.Storage/         # IndexRepository, SearchRepository, DbMigrations
 │   │   └── Migrations/*.sql          # recursos embebidos del ensamblado Storage (001_init, 002_thread_content_hash)
-│   └── ReviewMemory.Cli/             # host System.CommandLine: index · search · context
+│   ├── ReviewMemory.Cli/             # host System.CommandLine: index · search · context
 │   └── ReviewMemory.Mcp/             # servidor MCP stdio: tools search · context
 ├── tests/
 │   ├── ReviewMemory.Core.Tests/

@@ -58,10 +58,10 @@ docker compose up -d db                       # la BD debe estar levantada
 dotnet run --project src/ReviewMemory.Mcp     # servidor MCP sobre stdio
 ```
 
-Como herramienta .NET autocontenida: publica una vez y apunta cada cliente al binario.
+Como herramienta .NET autocontenida: publica una vez con el RID de tu plataforma (`linux-x64`, `osx-arm64`, `win-x64`…) y apunta cada cliente al binario resultante; no requiere .NET instalado en la máquina que ejecuta el server.
 
 ```bash
-dotnet publish src/ReviewMemory.Mcp -c Release -o publish/mcp
+dotnet publish src/ReviewMemory.Mcp -c Release -r linux-x64 --self-contained true -o publish/mcp
 ./publish/mcp/ReviewMemory.Mcp                # binario autocontenido del server
 ```
 
@@ -139,8 +139,8 @@ Cada hilo lleva una **decisión inferida** (`accepted` / `rejected` / `partially
 - [x] Búsqueda FTS + solapamiento + recencia; comando `context` que excluye el propio PR
 - [x] CI (build + tests contra Postgres real)
 - [ ] Specs en `docs/specs/`
-- [ ] Estado "resolved" de hilos vía GraphQL (REST no lo expone)
-- [ ] Re-indexado incremental (hoy re-indexar borra y recrea los hilos del PR)
+- [x] Estado "resolved" de hilos vía GraphQL (degrada sin romper la indexación)
+- [x] Re-indexado incremental por hash de contenido
 - [x] MCP server stdio con tools `search` y `context`, paridad JSON con el CLI
 - [ ] embeddings/pgvector · aprendizaje post-review
 

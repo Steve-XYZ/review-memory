@@ -118,7 +118,7 @@ mkdir -p .claude/skills
 cp -r /ruta/a/review-memory/skills/review-memory .claude/skills/
 ```
 
-**OpenCode** — mismo formato de directorio `SKILL.md` con frontmatter `name`/`description`; colócala en el directorio de skills de proyecto que documente tu versión (verificado para Claude Code; valida el mecanismo equivalente en tu instalación de OpenCode).
+**OpenCode** — misma estructura (`<nombre>/SKILL.md` con frontmatter `name` + `description`): colócala en `.opencode/skills/review-memory/` o reutiliza el `.claude/skills/` anterior, que OpenCode también descubre a nivel de proyecto. Verificada end-to-end solo con Claude Code; el descubrimiento de ambas rutas en OpenCode consta en su documentación de Agent Skills.
 
 ## Configuración
 

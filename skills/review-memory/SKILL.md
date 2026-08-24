@@ -28,15 +28,19 @@ El orden es deliberado y anti-anclaje: primero piensas, después consultas.
 ## Calibración de cada hallazgo
 
 - **Contradice una decisión `rejected`** → omítelo del cuerpo del informe o márcalo
-  explícitamente como «ya discutido y descartado», citando `url` y `threadId`. Una
-  decisión con `confidence: manual` pesa más que una `inferred`; ante duda entre dos
-  señales, gana la manual.
+  explícitamente como «ya discutido y descartado», citando `url` y `threadId`.
 - **Está respaldado por una discusión `accepted`** → consérvalo y cítalo como
   precedente con su `url`.
+- **Coincide solo en parte con una discusión `partially_accepted`** → precedente
+  parcial: gana algo de peso, pero exige verificar que el código actual siga aplicando
+  la parte que el equipo aceptó antes de apoyarte en ella.
 - **`unknown` o sin señal** → peso normal, como en cualquier review.
 - La coincidencia se juzga por archivo tocado y por sustancia del hallazgo, no por
   similitud textual superficial. Un score bajo no invalida un precedente pertinente;
   un score alto no lo confirma si el código cambió.
+
+Nota: el contrato JSON actual no expone la procedencia de la decisión (`inferred` vs
+`manual`); si una versión futura la añade, úsala para priorizar precedentes manuales.
 
 ## Transparencia
 
@@ -47,11 +51,16 @@ nada relevante dilo también: «la memoria no devolvió precedentes aplicables»
 
 ## Degradación — nunca bloquees el review
 
-- `context` responde error `pr_not_indexed` → ejecuta una vez
-  `reviewmemory index owner/name --last N` (o pídelo al usuario) y reintenta `context`.
+- `context` responde error `pr_not_indexed` → intenta una sola vez
+  `reviewmemory index owner/name --last N` **solo si el binario `reviewmemory` está
+  disponible en PATH**; si no lo está, pídele al usuario que indexe el PR. En ambos
+  casos reintenta `context` una vez.
+- Si el reintento también falla o nadie puede indexar → continúa con lo que `search`
+  devuelva más un review normal, declarándolo al inicio del informe:
+  «review sin contexto del propio PR: <motivo>».
 - BD o servidor MCP no disponibles → continúa como review normal y decláralo al inicio
   del informe: «review sin memoria: <motivo>».
-- Un fallo de la memoria nunca aborta ni retrasa el review más que ese reintento único.
+- Un fallo de la memoria nunca aborta ni retrasa el review más ese reintento único.
 
 ## Límite de responsabilidad
 

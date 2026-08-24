@@ -103,6 +103,23 @@ En `opencode.json`:
 }
 ```
 
+## Skill de review
+
+El consumo real de la memoria en el flujo de trabajo ([06-roadmap](docs/specs/06-roadmap.md) §4): una skill que ordena el review como *ticket → inspección del diff → consulta de memoria → validación de cada hallazgo contra el historial*. Un finding que contradice una decisión `rejected` se omite o se marca como «ya discutido y descartado» citando el hilo; uno respaldado por una discusión `accepted` gana peso y cita su precedente; nada se descarta en silencio. La skill está versionada en [`skills/review-memory/SKILL.md`](skills/review-memory/SKILL.md).
+
+Requisito previo: el [servidor MCP](#servidor-mcp) registrado en el cliente que ejecute la skill.
+
+### Instalación por proyecto
+
+**Claude Code** — copia o enlaza la skill dentro del proyecto revisado:
+
+```bash
+mkdir -p .claude/skills
+cp -r /ruta/a/review-memory/skills/review-memory .claude/skills/
+```
+
+**OpenCode** — mismo formato de directorio `SKILL.md` con frontmatter `name`/`description`; colócala en el directorio de skills de proyecto que documente tu versión (verificado para Claude Code; valida el mecanismo equivalente en tu instalación de OpenCode).
+
 ## Configuración
 
 | Variable | Uso |
@@ -142,6 +159,7 @@ Cada hilo lleva una **decisión inferida** (`accepted` / `rejected` / `partially
 - [x] Estado "resolved" de hilos vía GraphQL (degrada sin romper la indexación)
 - [x] Re-indexado incremental por hash de contenido
 - [x] MCP server stdio con tools `search` y `context`, paridad JSON con el CLI
+- [x] Skill de review guiada por la memoria (`skills/review-memory`)
 - [ ] embeddings/pgvector · aprendizaje post-review
 
 ## Documentación

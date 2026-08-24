@@ -217,6 +217,40 @@ public sealed class StorageIntegrationTests
         Assert.NotNull(stateAfterReindex.ContentHash);
     }
 
+    [Fact]
+    public async Task Upsert_persists_resolved_flag_per_thread()
+    {
+        if (ConnectionString is null)
+        {
+            return;
+        }
+
+        var repo = $"smoke/{Guid.NewGuid():N}";
+        await using var dataSource = NpgsqlDataSource.Create(ConnectionString);
+        await DbMigrations.ApplyAsync(dataSource);
+        var index = new IndexRepository(dataSource);
+
+        var resolvedId = NewThreadId();
+        var openId = NewThreadId();
+        await index.UpsertAsync(PullRequestWithResolvedThreads(repo, 9, resolvedId, openId));
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT id, resolved FROM review_threads WHERE pr_repo = @repo ORDER BY id", connection);
+        command.Parameters.AddWithValue("repo", repo);
+
+        var stored = new Dictionary<long, bool>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            stored[reader.GetInt64(0)] = reader.GetBoolean(1);
+        }
+
+        Assert.Equal(2, stored.Count);
+        Assert.True(stored[resolvedId]);
+        Assert.False(stored[openId]);
+    }
+
     private static long NewThreadId() =>
         Random.Shared.NextInt64(1_000_000_000, long.MaxValue / 4);
 
@@ -318,6 +352,42 @@ public sealed class StorageIntegrationTests
         await using var command = new NpgsqlCommand("SELECT COUNT(*) FROM schema_migrations", connection);
         return (int)(long)(await command.ExecuteScalarAsync())!;
     }
+
+    private static PullRequestData PullRequestWithResolvedThreads(
+        string repo, int number, long resolvedId, long openId) => new(
+            Repo: repo,
+            Number: number,
+            Title: "Persist resolved flag",
+            Body: "Dos hilos con estados resolved distintos.",
+            Author: "javier",
+            State: PrState.Open,
+            CreatedAt: DateTimeOffset.UtcNow.AddDays(-5),
+            UpdatedAt: DateTimeOffset.UtcNow.AddDays(-4),
+            MergedAt: null,
+            Files:
+            [
+                new PullRequestFileData("src/Service.cs", 4, 1, "@@ -1,2 +1,4 @@\n a\n+b\n+c\n d"),
+            ],
+            Threads:
+            [
+                new ReviewThreadData(
+                    Id: resolvedId,
+                    Path: "src/Service.cs",
+                    Line: 2,
+                    Resolved: true,
+                    Finding: new ReviewCommentData(resolvedId, "reviewer", "Null check missing here.", DateTimeOffset.UtcNow.AddDays(-5)),
+                    Replies:
+                    [
+                        new ReviewCommentData(resolvedId + 1, "dev", "Fixed in the next commit.", DateTimeOffset.UtcNow.AddDays(-5).AddHours(3)),
+                    ]),
+                new ReviewThreadData(
+                    Id: openId,
+                    Path: "src/Service.cs",
+                    Line: 5,
+                    Resolved: false,
+                    Finding: new ReviewCommentData(openId, "reviewer", "Should this be configurable?", DateTimeOffset.UtcNow.AddDays(-4)),
+                    Replies: []),
+            ]);
 
     private static PullRequestData SamplePullRequest(
         string repo, int number, long? threadId = null, int line = 42,

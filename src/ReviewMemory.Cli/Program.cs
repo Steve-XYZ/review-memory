@@ -89,7 +89,9 @@ indexCommand.SetAction(async (parseResult, cancellationToken) =>
     try
     {
         await using var dataSource = await OpenDatabaseAsync(parseResult.GetValue(connectionStringOption));
-        var source = new GitHubPullRequestSource(ResolveToken(parseResult.GetValue(tokenOption)));
+        var source = new GitHubPullRequestSource(
+            ResolveToken(parseResult.GetValue(tokenOption)),
+            reason => Console.Error.WriteLine($"aviso: no se pudo obtener resolved vía GraphQL: {reason}"));
         var index = new IndexRepository(dataSource);
 
         var pullRequests = 0;

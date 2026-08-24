@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ReviewMemory.GitHub.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Octokit" Version="14.0.0" />
   </ItemGroup>
 

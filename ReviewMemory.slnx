@@ -3,12 +3,14 @@
     <Project Path="src/ReviewMemory.Cli/ReviewMemory.Cli.csproj" />
     <Project Path="src/ReviewMemory.Core/ReviewMemory.Core.csproj" />
     <Project Path="src/ReviewMemory.GitHub/ReviewMemory.GitHub.csproj" />
+    <Project Path="src/ReviewMemory.Mcp/ReviewMemory.Mcp.csproj" />
     <Project Path="src/ReviewMemory.Storage/ReviewMemory.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ReviewMemory.Cli.Tests/ReviewMemory.Cli.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Core.Tests/ReviewMemory.Core.Tests.csproj" />
     <Project Path="tests/ReviewMemory.GitHub.Tests/ReviewMemory.GitHub.Tests.csproj" />
+    <Project Path="tests/ReviewMemory.Mcp.Tests/ReviewMemory.Mcp.Tests.csproj" />
     <Project Path="tests/ReviewMemory.Storage.Tests/ReviewMemory.Storage.Tests.csproj" />
   </Folder>
 </Solution>

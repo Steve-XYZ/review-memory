@@ -8,6 +8,7 @@
 | CLI | System.CommandLine `3.0.0-preview.7.26381.103` |
 | Cliente GitHub | Octokit `14.0.0` (API REST v3) · cliente GraphQL v4 propio (`HttpClient` + System.Text.Json, sin dependencias nuevas) |
 | Persistencia | Npgsql `10.0.3` sobre PostgreSQL 17 (full-text search nativo) |
+| Servidor MCP | SDK oficial de MCP en C# (`ModelContextProtocol` `2.2.0`), transporte stdio |
 | Tests | xUnit `2.9.3` + Microsoft.NET.Test.Sdk `17.14.1`, coverlet.collector `6.0.4` |
 | Frontend | ninguno: CLI con salida `console` y `json` para agentes |
 
@@ -32,6 +33,7 @@ review-memory/
 │   ├── ReviewMemory.Storage/         # IndexRepository, SearchRepository, DbMigrations
 │   │   └── Migrations/*.sql          # recursos embebidos del ensamblado Storage (001_init, 002_thread_content_hash)
 │   └── ReviewMemory.Cli/             # host System.CommandLine: index · search · context
+│   └── ReviewMemory.Mcp/             # servidor MCP stdio: tools search · context
 ├── tests/
 │   ├── ReviewMemory.Core.Tests/
 │   └── ReviewMemory.Storage.Tests/   # integración contra Postgres real (se omiten sin conexión)
@@ -50,6 +52,7 @@ Dirección de dependencias:
 ```
 
 - **Cli → { Core, GitHub, Storage }**: compone los tres; parsea args y mapea a exit codes (0 éxito; 1 error de parsing o runtime; 2 uso inválido detectado por el programa — detalle en 04-cli §Exit codes).
+- **Mcp → { Core, Storage }**: servidor MCP stdio de solo lectura; reutiliza `SearchRepository` y `SearchRenderer` para devolver el mismo JSON que el CLI (03-recuperacion §Contrato para agentes).
 - **GitHub → Core** y **Storage → Core**: ambos hablan el idioma del dominio.
 - **Core → nada**: cero `PackageReference` y cero `ProjectReference`. El contrato `IPullRequestSource` vive en Core, así que las pruebas pueden alimentar fuentes en memoria y una futura fuente GraphQL solo añadiría un proyecto que referencia Core.
 

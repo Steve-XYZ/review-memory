@@ -22,7 +22,7 @@ El agente que revisa tu PR sabe qué preocupaciones son históricamente relevant
 
 ## Stack
 
-.NET 10 · System.CommandLine · Octokit · Npgsql (PostgreSQL full-text search) · xUnit
+.NET 10 · System.CommandLine · Octokit · Npgsql (PostgreSQL full-text search) · ModelContextProtocol (servidor MCP stdio) · xUnit
 
 ## Comandos
 
@@ -39,6 +39,69 @@ reviewmemory context Shirka-Corporation/player-manager --pr 2268 --limit 5
 ```
 
 `--format json` devuelve el mismo resultado serializado para consumo de agentes.
+
+## Servidor MCP
+
+La misma memoria, expuesta como tools MCP de solo lectura sobre stdio: los agentes (Claude Code, OpenCode, Codex, Copilot, Cursor…) consultan el historial sin invocar el CLI ni saber nada de Postgres.
+
+| Tool | Parámetros | Equivale a |
+|---|---|---|
+| `search` | `query`, `repo` (opcional), `files` (opcional), `limit` (opcional) | `reviewmemory search --format json` |
+| `context` | `repo`, `pr`, `limit` (opcional) | `reviewmemory context --format json` |
+
+Cada tool devuelve exactamente el mismo JSON que el comando homónimo del CLI con `--format json`. No hay tools de escritura: la memoria se alimenta con `index`, nunca desde el agente consumidor. Si la BD no está accesible, la respuesta es un error estructurado (`isError: true` con código y mensaje) y el proceso sigue vivo.
+
+### Ejecutar
+
+```bash
+docker compose up -d db                       # la BD debe estar levantada
+dotnet run --project src/ReviewMemory.Mcp     # servidor MCP sobre stdio
+```
+
+Como herramienta .NET autocontenida: publica una vez y apunta cada cliente al binario.
+
+```bash
+dotnet publish src/ReviewMemory.Mcp -c Release -o publish/mcp
+./publish/mcp/ReviewMemory.Mcp                # binario autocontenido del server
+```
+
+La conexión se resuelve igual que en el CLI: variable `REVIEWMEMORY_CONNECTIONSTRING` o, por defecto, la BD local de docker-compose (`localhost:5433`).
+
+### Registro en Claude Code
+
+En el `.mcp.json` del proyecto (o en la configuración global):
+
+```json
+{
+  "mcpServers": {
+    "reviewmemory": {
+      "type": "stdio",
+      "command": "/ruta/absoluta/a/review-memory/publish/mcp/ReviewMemory.Mcp",
+      "env": {
+        "REVIEWMEMORY_CONNECTIONSTRING": "Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory"
+      }
+    }
+  }
+}
+```
+
+### Registro en OpenCode
+
+En `opencode.json`:
+
+```json
+{
+  "mcp": {
+    "reviewmemory": {
+      "type": "local",
+      "command": ["/ruta/absoluta/a/review-memory/publish/mcp/ReviewMemory.Mcp"],
+      "environment": {
+        "REVIEWMEMORY_CONNECTIONSTRING": "Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory"
+      }
+    }
+  }
+}
+```
 
 ## Configuración
 
@@ -78,7 +141,8 @@ Cada hilo lleva una **decisión inferida** (`accepted` / `rejected` / `partially
 - [ ] Specs en `docs/specs/`
 - [ ] Estado "resolved" de hilos vía GraphQL (REST no lo expone)
 - [ ] Re-indexado incremental (hoy re-indexar borra y recrea los hilos del PR)
-- [ ] MCP server · embeddings/pgvector · aprendizaje post-review
+- [x] MCP server stdio con tools `search` y `context`, paridad JSON con el CLI
+- [ ] embeddings/pgvector · aprendizaje post-review
 
 ## Documentación
 

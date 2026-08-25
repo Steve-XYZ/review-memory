@@ -35,11 +35,11 @@ public static class SearchRenderer
     {
         if (hits.Count == 0)
         {
-            return "0 discusiones relevantes encontradas";
+            return "0 relevant discussions found";
         }
 
         var writer = new StringWriter();
-        writer.WriteLine($"{hits.Count} discusión(es) históricamente relevante(s)");
+        writer.WriteLine($"{hits.Count} historically relevant discussion(s)");
         writer.WriteLine();
 
         for (var i = 0; i < hits.Count; i++)
@@ -48,16 +48,16 @@ public static class SearchRenderer
             var band = Scoring.Label(Scoring.BandOf(hit.Score));
 
             writer.WriteLine($"{i + 1}. {band} — {Truncate(FirstLine(hit.Finding), 72)}");
-            writer.WriteLine($"   Similitud: {hit.Score:0.00}");
+            writer.WriteLine($"   Similarity: {hit.Score:0.00}");
             writer.WriteLine($"   PR #{hit.Number} ({hit.Repo}) · {hit.CreatedAt:yyyy-MM-dd}");
             writer.WriteLine($"   File: {hit.Path}{LineSuffix(hit.Line)}");
             writer.WriteLine();
-            writer.WriteLine("   Preocupación previa del reviewer:");
+            writer.WriteLine("   Previous reviewer concern:");
             writer.WriteLine($"   {Indent(Truncate(hit.Finding.Replace('\n', ' '), 240))}");
             if (hit.Outcome is not DecisionOutcome.Unknown || hit.Reason is not null)
             {
                 writer.WriteLine();
-                writer.WriteLine($"   Resolución: {DescribeOutcome(hit.Outcome, hit.Reason)}");
+                writer.WriteLine($"   Resolution: {DescribeOutcome(hit.Outcome, hit.Reason)}");
             }
             writer.WriteLine($"   {hit.Url}");
             if (i < hits.Count - 1)
@@ -76,10 +76,10 @@ public static class SearchRenderer
     {
         var label = outcome switch
         {
-            DecisionOutcome.Accepted => "Finding aceptado — se corrigió la implementación",
-            DecisionOutcome.Rejected => "Finding rechazado",
-            DecisionOutcome.PartiallyAccepted => "Finding parcialmente aceptado",
-            _ => "Desenlace desconocido",
+            DecisionOutcome.Accepted => "Finding accepted — implementation was fixed",
+            DecisionOutcome.Rejected => "Finding rejected",
+            DecisionOutcome.PartiallyAccepted => "Finding partially accepted",
+            _ => "Unknown outcome",
         };
         return reason is null ? label : $"{label}. {reason}";
     }

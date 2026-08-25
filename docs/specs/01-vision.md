@@ -1,103 +1,103 @@
-# Visión
+# Vision
 
-## Problema
+## Problem
 
-Cada vez se escribe más código con agentes y, en consecuencia, cada vez se revisa más. Generar otro diff o otra lista de findings es barato y abundante. El recurso escaso es otro: conocer el codebase y las decisiones que el equipo ya tomó sobre él.
+More code is being written with agents and, as a result, more is being reviewed. Generating another diff or another list of findings is cheap and abundant. The scarce resource is something else: knowing the codebase and the decisions the team already made about it.
 
-Ese conocimiento existe pero está enterrado. Quedó escrito en los hilos de review de cientos de PRs mergeados: patrones rechazados con su motivo, excepciones aceptadas con condiciones, bugs recurrentes en ciertos módulos. Hoy nadie lo consulta antes de revisar. Resultado previsible: cada reviewer —humano o agente— vuelve a preguntar lo que ya estaba respondido, reaprueba lo que fue rechazado o rechaza lo que fue debatido y aceptado.
+That knowledge exists but it is buried. It was written in the review threads of hundreds of merged PRs: rejected patterns with their reason, accepted exceptions with conditions, recurring bugs in certain modules. Today nobody consults it before reviewing. Predictable result: every reviewer —human or agent— asks again what was already answered, re-approves what was rejected, or rejects what was debated and accepted.
 
-## Qué es
+## What it is
 
-ReviewMemory indexa los PRs de un repositorio y sus discusiones de review en PostgreSQL. Antes de revisar un PR, cualquier reviewer consulta el historial:
+ReviewMemory indexes a repository's PRs and their review discussions into PostgreSQL. Before reviewing a PR, any reviewer consults the history:
 
 ```
 reviewmemory context Shirka-Corporation/player-manager --pr 2268
 ```
 
 ```
-3 discusión(es) históricamente relevante(s)
+3 historically relevant discussion(s)
 
 1. HIGH — Provider callbacks could be processed twice.
-   Similitud: 0.91
+   Similarity: 0.91
    PR #1943 (Shirka-Corporation/player-manager) · 2026-03-10
    File: src/AdJoePayoutHandler.cs:120
 
-   Preocupación previa del reviewer:
+   Previous reviewer concern:
    Provider callbacks could be processed twice during retries...
 
-   Resolución: Finding aceptado — se corrigió la implementación
+   Resolution: Finding accepted — implementation was fixed
    https://github.com/Shirka-Corporation/player-manager/pull/1943#discussion_r…
 ```
 
-Cada resultado trae lo que un reviewer necesita: la preocupación textual del reviewer anterior, dónde se planteó, cómo terminó (aceptada, rechazada, parcialmente aceptada o desconocido) y el enlace al hilo original.
+Each result carries what a reviewer needs: the previous reviewer's textual concern, where it was raised, how it ended (accepted, rejected, partially accepted, or unknown), and the link to the original thread.
 
-## Posicionamiento
+## Positioning
 
-No es otro AI reviewer. La memoria es el producto; el LLM reviewer no lo es.
+Not another AI reviewer. The memory is the product; the LLM reviewer is not.
 
-| | AI reviewer genérico | ReviewMemory |
+| | Generic AI reviewer | ReviewMemory |
 |---|---|---|
-| Producto | el modelo que genera findings | la memoria que los contextualiza |
-| Criterio | reglas genéricas del prompt | decisiones reales de este equipo |
-| Defensa | ninguna: lo reemplaza el próximo modelo | acumulativa: crece con cada review |
+| Product | the model that generates findings | the memory that contextualizes them |
+| Moat | none: replaced by the next model | cumulative: grows with every review |
+| Criterion | generic prompt rules | this team's real decisions |
 
-Es deliberadamente agnóstica del reviewer: sirve igual para una persona, para Codex, para Claude o para Copilot. Hoy se integra por CLI (`--format json` para agentes); después, vía MCP server (spec 06-roadmap).
+It is deliberately reviewer-agnostic: it works the same for a person, for Codex, for Claude, or for Copilot. Today it integrates via CLI (`--format json` for agents) and via MCP server (spec 06-roadmap).
 
-## Qué NO hace
+## What it does NOT do
 
-No-goals explícitos; proponer cualquiera de estos exige cambiar esta spec primero:
+Explicit no-goals; proposing any of these requires changing this spec first:
 
-- **No comenta PRs** ni abre reviews en GitHub. Solo lee el historial y responde consultas.
-- **No puntúa código** ni emite findings propios sobre el diff actual. Clasifica precedentes históricos, no calidad.
-- **No reemplaza al reviewer**: no aprueba ni bloquea. Humano o agente decide; esto solo aporta contexto.
-- **No entrena ni aloja modelos**: la recuperación de etapa 1 no usa IA, solo FTS, solapamiento de archivos y recencia.
-- **No modifica el repositorio fuente**: es un índice de lectura sobre GitHub.
+- **Does not comment on PRs** or open reviews on GitHub. It only reads history and answers queries.
+- **Does not score code** or emit its own findings about the current diff. It classifies historical precedents, not quality.
+- **Does not replace the reviewer**: it neither approves nor blocks. A human or agent decides; this only provides context.
+- **Does not train or host models**: stage 1 retrieval uses no AI, only FTS, file overlap, and recency.
+- **Does not modify the source repository**: it is a read-only index over GitHub.
 
-## Usuario objetivo y momento de uso
+## Target user and moment of use
 
-Dos usuarios, mismo momento:
+Two users, same moment:
 
-- **Reviewer humano**: ejecuta `context` sobre el PR antes de leer el diff, para saber qué preocupaciones aplican y cuáles ya fueron descartadas por el equipo.
-- **Agente reviewer** (Codex, Claude, Copilot u otro): consume `search`/`context` como parte de su contexto al iniciar la review, hoy invocando el CLI con `--format json`, mañana vía MCP.
+- **Human reviewer**: runs `context` on the PR before reading the diff, to know which concerns apply and which were already discarded by the team.
+- **Reviewer agent** (Codex, Claude, Copilot, or another): consumes `search`/`context` as part of its context when starting the review, today by invoking the CLI with `--format json`, tomorrow via MCP.
 
-El momento es antes y durante una review concreta. No después (no es una herramienta de post-mortem) ni como gate automático de CI.
+The moment is before and during a specific review. Not after (it is not a post-mortem tool) nor as an automatic CI gate.
 
-## Objetivo por etapa
+## Per-stage goal
 
-### Etapa 1 — bases (hecha)
+### Stage 1 — foundations (done)
 
-Verificable contra el README y el código actual:
+Verifiable against the README and current code:
 
-- Se construyó la solución `Cli · Core · GitHub · Storage` con tests (xUnit) y CI que compila y corre los tests contra Postgres real.
-- Se implementó la ingesta por REST de GitHub: PRs, archivos tocados, hunks y comentarios agrupados en hilos.
-- Se creó el esquema PostgreSQL con migraciones embebidas versionadas en `schema_migrations`.
-- Se implementó el ranking sin IA con tres señales combinadas —FTS sobre comentario y ruta (`tsvector`, índice GIN), solapamiento de archivos y recencia exponencial con constante temporal de 120 días (mitad real ≈ 83 días)—, pesos 0.55/0.30/0.15 y bandas HIGH ≥ 0.65, MEDIUM ≥ 0.40 (ver spec 03-recuperacion).
-- Se infirió la decisión de cada hilo (`accepted`/`rejected`/`partially_accepted`/`unknown`) con señales léxicas deterministas; señales contradictorias quedan como `unknown` en vez de adivinar (ver spec 05-decisiones).
-- Se publicaron los comandos `index`, `search` y `context` con salida `console` y `json` equivalentes; `context` excluye las discusiones del propio PR (ver spec 04-cli).
+- Built the `Cli · Core · GitHub · Storage` solution with tests (xUnit) and CI that builds and runs tests against a real Postgres.
+- Implemented GitHub REST ingestion: PRs, touched files, hunks, and comments grouped into threads.
+- Created the PostgreSQL schema with embedded migrations versioned in `schema_migrations`.
+- Implemented AI-free ranking with three combined signals —FTS over comment and path (`tsvector`, GIN index), file overlap, and exponential recency with a 120-day time constant (actual half-life ≈ 83 days)—, weights 0.55/0.30/0.15, and bands HIGH ≥ 0.65, MEDIUM ≥ 0.40 (see spec 03-ranking).
+- Inferred each thread's decision (`accepted`/`rejected`/`partially_accepted`/`unknown`) with deterministic lexical signals; contradictory signals stay `unknown` instead of guessing (see spec 05-decisions).
+- Shipped the `index`, `search`, and `context` commands with equivalent `console` and `json` output; `context` excludes the PR's own discussions (see spec 04-cli).
 
-Quedó fuera a propósito: el estado real de resolución de hilos (la API REST no lo expone), el re-indexado incremental y cualquier integración con agentes.
+Deliberately left out: the actual resolution state of threads (the REST API does not expose it), incremental re-indexing, and any agent integration.
 
-### Etapa 2 — endurecer lo existente y cerrar las brechas
+### Stage 2 — harden what exists and close the gaps
 
-- Endurecer las specs 03-recuperacion, 04-cli y 05-decisiones: convertir el comportamiento implementado en contrato verificable (formato de salida estable, semántica del score, reglas de decisión con tests de contrato).
-- Resolver el estado `resolved` de los hilos vía GraphQL y distinguirlo del desenlace inferido léxicamente.
-- Índice incremental: re-indexar un PR actualiza sus hilos en lugar de borrarlos y recrearlos.
-- El MCP server, embeddings/pgvector y el aprendizaje post-review quedan planificados en la spec 06-roadmap; esta etapa no los compromete.
+- Harden specs 03-ranking, 04-cli, and 05-decisions: turn implemented behavior into verifiable contract (stable output format, score semantics, decision rules with contract tests).
+- Resolve threads' `resolved` state via GraphQL and distinguish it from the lexically inferred outcome.
+- Incremental indexing: re-indexing a PR updates its threads instead of deleting and recreating them.
+- The MCP server, embeddings/pgvector, and post-review learning stay planned in spec 06-roadmap; this stage does not commit to them.
 
-## Señal de éxito
+## Success signal
 
-Medible con datos propios, sin terceros:
+Measurable with our own data, no third parties:
 
-- **Cobertura de precedentes**: porcentaje de los comentarios de una review nueva que ya tenían precedente recuperable (hit en banda HIGH o MEDIUM) en la memoria. Si la memoria funciona, los findings repetibles deberían aparecer con precedente; los genuinamente nuevos, no.
-- **Recall@k manual sobre reviews pasadas**: para una muestra de PRs ya revisados y mergeados, ejecutar `context` (que ya excluye los hilos del propio PR) y verificar si las preocupaciones que realmente surgieron aparecen en el top-k de resultados. Procedimiento manual, k inicial = 5.
-- **Consumo real por un agente** (etapa 2): al menos un consumidor externo al proyecto —humano o agente— completa reviews consultando la memoria de forma regular. Es binario y observable, no una métrica de vanidad.
+- **Precedent coverage**: percentage of comments in a new review that already had a retrievable precedent (hit in the HIGH or MEDIUM band) in the memory. If the memory works, repeatable findings should appear with precedent; genuinely new ones should not.
+- **Manual Recall@k over past reviews**: for a sample of already-reviewed and merged PRs, run `context` (which already excludes the PR's own threads) and check whether the concerns that actually arose appear in the top-k results. Manual procedure, initial k = 5.
+- **Real consumption by an agent** (stage 2): at least one consumer outside the project —human or agent— completes reviews consulting the memory regularly. It is binary and observable, not a vanity metric.
 
-Estas medidas calibran los umbrales de la etapa 2; esta spec fija el método, no cifras arbitrarias.
+These measures calibrate stage 2 thresholds; this spec fixes the method, not arbitrary figures.
 
-## Criterios de aceptación de esta spec
+## Acceptance criteria of this spec
 
-- Cada afirmación de la etapa 1 corresponde a comportamiento verificable en el código, el README o el CI actuales.
-- Un lector nuevo entiende en una lectura qué es, qué no es y para quién es, sin abrir el código.
-- Los no-goals son accionables: cualquier contribución que comente PRs, puntúe código o pretenda reemplazar al reviewer contradice este documento y debe discutirse aquí antes.
-- Las specs hermanas (02-arquitectura, 03-recuperacion, 04-cli, 05-decisiones, 06-roadmap) se referencian por número; este documento no duplica sus detalles.
-- Toda métrica propuesta es calculable con datos del propio repositorio y de su memoria, sin cifras de mercado ni citas externas.
+- Every stage 1 claim corresponds to verifiable behavior in the current code, README, or CI.
+- A new reader understands in one read what it is, what it is not, and who it is for, without opening the code.
+- The no-goals are actionable: any contribution that comments on PRs, scores code, or intends to replace the reviewer contradicts this document and must be discussed here first.
+- Sibling specs (02-architecture, 03-ranking, 04-cli, 05-decisions, 06-roadmap) are referenced by number; this document does not duplicate their details.
+- Every proposed metric is computable from the repository's own data and memory, with no market figures or external citations.

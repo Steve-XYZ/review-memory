@@ -46,28 +46,28 @@ public sealed class SearchRepository(NpgsqlDataSource dataSource)
         """;
 
     /// <summary>
-    /// Busca discusiones históricas por texto y/o archivos tocados.
+    /// Searches historical discussions by text and/or touched files.
     /// </summary>
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(
         SearchQuery query, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query.Text) && query.Paths is not { Count: > 0 })
         {
-            throw new ArgumentException("La búsqueda requiere texto o al menos una ruta de archivo.");
+            throw new ArgumentException("Search requires text or at least one file path.");
         }
 
         return await QueryAsync(query, exclude: null, textIsFilter: true, cancellationToken);
     }
 
     /// <summary>
-    /// Encuentra discusiones en OTROS PRs relevantes para los archivos y el
-    /// tema del PR indicado. Excluye las discusiones del propio PR.
+    /// Finds discussions in OTHER PRs relevant to the given PR's files and
+    /// topic. Excludes the PR's own discussions.
     /// </summary>
     public async Task<IReadOnlyList<SearchHit>> ContextForPullRequestAsync(
         string repo, int number, SearchQuery? options = null, CancellationToken cancellationToken = default)
     {
         var summary = await GetPullRequestAsync(repo, number, cancellationToken)
-                      ?? throw new InvalidOperationException($"El PR {repo}#{number} no está indexado.");
+                      ?? throw new InvalidOperationException($"PR {repo}#{number} is not indexed.");
 
         var paths = await GetFilePathsAsync(repo, number, cancellationToken);
         var text = string.IsNullOrWhiteSpace(options?.Text)

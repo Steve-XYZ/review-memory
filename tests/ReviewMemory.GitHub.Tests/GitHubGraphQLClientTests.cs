@@ -85,7 +85,7 @@ public sealed class GitHubGraphQLClientTests
         """;
 
     [Fact]
-    public async Task Mapea_isResolved_al_databaseId_del_primer_comentario()
+    public async Task Maps_isResolved_to_first_comments_databaseId()
     {
         var handler = new FakeHandler();
         handler.Enqueue(SinglePage);
@@ -100,7 +100,7 @@ public sealed class GitHubGraphQLClientTests
     }
 
     [Fact]
-    public async Task Pagina_por_pageInfo_hasta_hasNextPage_false()
+    public async Task Pages_by_pageInfo_until_hasNextPage_false()
     {
         var handler = new FakeHandler();
         handler.Enqueue(PageOne);
@@ -115,7 +115,7 @@ public sealed class GitHubGraphQLClientTests
     }
 
     [Fact]
-    public async Task Pr_sin_hilos_devuelve_diccionario_vacio()
+    public async Task Pr_without_threads_returns_empty_dictionary()
     {
         var handler = new FakeHandler();
         handler.Enqueue("""
@@ -134,7 +134,7 @@ public sealed class GitHubGraphQLClientTests
     }
 
     [Fact]
-    public async Task Fallo_http_lanza_con_el_estado()
+    public async Task Http_failure_throws_with_the_status()
     {
         var handler = new FakeHandler();
         handler.Enqueue(HttpStatusCode.BadGateway);
@@ -146,7 +146,7 @@ public sealed class GitHubGraphQLClientTests
     }
 
     [Fact]
-    public async Task Rate_limit_en_payload_lanza_con_el_mensaje_del_error()
+    public async Task Rate_limit_in_payload_throws_with_error_message()
     {
         var handler = new FakeHandler();
         handler.Enqueue("""

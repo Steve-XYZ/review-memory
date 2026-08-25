@@ -1,8 +1,8 @@
 # CLI
 
-La superficie CLI vive en `src/ReviewMemory.Cli/Program.cs` sobre System.CommandLine. El binario es `ReviewMemory.Cli`; en desarrollo se invoca con `dotnet run --project src/ReviewMemory.Cli -- <comando>`. Los comandos `search` y `context` solo hablan con PostgreSQL; solo `index` habla con la API de GitHub.
+The CLI surface lives in `src/ReviewMemory.Cli/Program.cs` on System.CommandLine. The binary is `ReviewMemory.Cli`; in development it is invoked with `dotnet run --project src/ReviewMemory.Cli -- <command>`. The `search` and `context` commands only talk to PostgreSQL; only `index` talks to the GitHub API.
 
-## Comandos
+## Commands
 
 ### index
 
@@ -10,14 +10,14 @@ La superficie CLI vive en `src/ReviewMemory.Cli/Program.cs` sobre System.Command
 reviewmemory index <repo> [options]
 ```
 
-Descarga y indexa los PRs recientes de un repositorio. Pagina la API REST (state `all`, ordenados por `updated` descendente, páginas de 100) hasta cubrir `--last` PRs o agotar el historial; por cada PR descarga archivos y comentarios de review, agrupa los comentarios en hilos por su cadena de `in_reply_to`, infiere la decisión de cada hilo y hace upsert. Re-indexar borra y recrea los hilos del PR.
+Downloads and indexes a repository's recent PRs. Pages the REST API (state `all`, sorted by `updated` descending, pages of 100) until covering `--last` PRs or exhausting history; per PR it downloads files and review comments, groups comments into threads by their `in_reply_to` chain, infers each thread's decision, and upserts. Re-indexing reconciles the PR's threads instead of recreating them (see 02-architecture §Incremental re-indexing).
 
-| Argumento/Opción | Tipo | Default | Descripción |
+| Argument/Option | Type | Default | Description |
 |---|---|---|---|
-| `repo` | `owner/name` | — | Repositorio a indexar; otro formato es error de uso (exit 2) |
-| `--last` | int | `200` | Cantidad de PRs más recientemente actualizados a indexar |
-| `--token` | string? | `$GITHUB_TOKEN` | Token de GitHub; vacío o ausente ⇒ cliente anónimo (60 req/h) |
-| `--connection-string` | string? | ver [Configuración](#configuración) | Conexión Postgres |
+| `repo` | `owner/name` | — | Repository to index; another format is a usage error (exit 2) |
+| `--last` | int | `200` | Number of most recently updated PRs to index |
+| `--token` | string? | `$GITHUB_TOKEN` | GitHub token; empty or absent ⇒ anonymous client (60 req/h) |
+| `--connection-string` | string? | see [Configuration](#configuration) | Postgres connection |
 
 ### search
 
@@ -25,16 +25,16 @@ Descarga y indexa los PRs recientes de un repositorio. Pagina la API REST (state
 reviewmemory search <query> [options]
 ```
 
-Busca discusiones históricas de review por texto (full-text search) y/o por archivos tocados (solapamiento). Al menos una de las dos señales debe estar presente.
+Searches historical review discussions by text (full-text search) and/or by touched files (overlap). At least one of the two signals must be present.
 
-| Argumento/Opción | Tipo | Default | Descripción |
+| Argument/Option | Type | Default | Description |
 |---|---|---|---|
-| `query` | string | — | Texto libre a buscar en el historial de reviews |
-| `--repo` | string? | — | Filtra por repositorio `owner/name` |
-| `--files` | string? (csv) | — | Rutas separadas por coma para búsqueda por solapamiento |
-| `--limit` | int | `10` | Máximo de resultados |
-| `--format` | `console` \| `json` | `console` | Formato del reporte |
-| `--connection-string` | string? | ver [Configuración](#configuración) | Conexión Postgres |
+| `query` | string | — | Free text to search in the review history |
+| `--repo` | string? | — | Filters by `owner/name` repository |
+| `--files` | string? (csv) | — | Comma-separated paths for overlap-based search |
+| `--limit` | int | `10` | Maximum number of results |
+| `--format` | `console` \| `json` | `console` | Report format |
+| `--connection-string` | string? | see [Configuration](#configuration) | Postgres connection |
 
 ### context
 
@@ -42,117 +42,117 @@ Busca discusiones históricas de review por texto (full-text search) y/o por arc
 reviewmemory context <repo> [options]
 ```
 
-Recupera el contexto histórico relevante para un PR concreto, **excluyendo las discusiones del propio PR**. El PR debe estar indexado previamente.
+Retrieves relevant historical context for a specific PR, **excluding the PR's own discussions**. The PR must be indexed beforehand.
 
-| Argumento/Opción | Tipo | Default | Descripción |
+| Argument/Option | Type | Default | Description |
 |---|---|---|---|
-| `repo` | `owner/name` | — | Repositorio del PR; otro formato es error de uso (exit 2) |
-| `--pr` | int | — (**requerido**) | Número del PR a contextualizar |
-| `--limit` | int | `10` | Máximo de resultados |
-| `--format` | `console` \| `json` | `console` | Formato del reporte |
-| `--connection-string` | string? | ver [Configuración](#configuración) | Conexión Postgres |
+| `repo` | `owner/name` | — | Repository of the PR; another format is a usage error (exit 2) |
+| `--pr` | int | — (**required**) | Number of the PR to contextualize |
+| `--limit` | int | `10` | Maximum number of results |
+| `--format` | `console` \| `json` | `console` | Report format |
+| `--connection-string` | string? | see [Configuration](#configuration) | Postgres connection |
 
-Nota: `--limit` comparte definición entre `search` y `context`; su default es 10 en ambos. Los ejemplos del README pasan `--limit 5` explícito.
+Note: `--limit` shares its definition between `search` and `context`; its default is 10 in both. The README examples pass an explicit `--limit 5`.
 
-## Configuración
+## Configuration
 
-Ambas resoluciones ocurren al arrancar cada comando; las migraciones de esquema (`schema_migrations`) se aplican antes de cualquier lectura o escritura.
+Both resolutions happen at the start of every command; schema migrations (`schema_migrations`) are applied before any read or write.
 
-**Connection string**, en este orden de precedencia:
+**Connection string**, in this precedence order:
 
 1. Flag `--connection-string`
-2. Variable de entorno `REVIEWMEMORY_CONNECTIONSTRING`
-3. Default: `Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory` — la BD local de `docker-compose.yml` (Postgres 17 publicado en `localhost:5433` para no chocar con Postgres locales en 5432)
+2. Environment variable `REVIEWMEMORY_CONNECTIONSTRING`
+3. Default: `Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory` — the local database from `docker-compose.yml` (Postgres 17 published at `localhost:5433` to avoid clashing with local Postgres instances on 5432)
 
-**Token de GitHub** (solo lo usa `index`):
+**GitHub token** (only used by `index`):
 
 1. Flag `--token`
-2. Variable de entorno `GITHUB_TOKEN`
+2. Environment variable `GITHUB_TOKEN`
 
-Sin token, Octokit opera anónimo: 60 req/h por IP. Autenticado: 5.000 req/h. Cada PR indexado cuesta ~3 requests (listado paginado + archivos + comentarios de review); indexar 200 PRs son ~600 requests.
+Without a token, Octokit operates anonymously: 60 req/h per IP. Authenticated: 5,000 req/h. Each indexed PR costs ~3 requests (paginated listing + files + review comments); indexing 200 PRs is ~600 requests.
 
 ## Exit codes
 
-| Código | Condición |
+| Code | Condition |
 |---|---|
-| `0` | Éxito, incluida una búsqueda sin resultados (`0 discusiones relevantes encontradas`) |
-| `1` | Error de parsing de System.CommandLine (falta comando, falta `--pr` requerido, opción desconocida): imprime mensaje + ayuda. Error en tiempo de ejecución capturado (`Octokit.ApiException`, `HttpRequestException`, `NpgsqlException`): imprime `error: <mensaje>` en stderr |
-| `2` | Uso inválido detectado por el programa, con mensaje en stderr (ver tabla siguiente) |
+| `0` | Success, including a search without results (`0 relevant discussions found`) |
+| `1` | System.CommandLine parse error (missing command, missing required `--pr`, unknown option): prints message + help. Caught runtime error (`Octokit.ApiException`, `HttpRequestException`, `NpgsqlException`): prints `error: <message>` to stderr |
+| `2` | Invalid usage detected by the program, with message on stderr (see next table) |
 
-Validaciones que producen exit 2, con su mensaje literal:
+Validations that produce exit 2, with their literal message:
 
-| Comando | Condición | Mensaje (stderr) |
+| Command | Condition | Message (stderr) |
 |---|---|---|
-| `index`, `context` | `repo` no es `owner/name` (dos segmentos no vacíos) | `error: el repositorio debe tener el formato owner/name` |
-| `search`, `context` | `--format` distinto de `console`/`json` | `error: --format desconocido '<valor>' (console|json)` |
-| `search` | `query` vacío Y sin `--files` útil | `error: la búsqueda requiere texto o --files` |
-| `context` | El PR no está en la memoria | `error: el PR <owner>/<name>#<n> no está indexado; ejecuta 'reviewmemory index' primero` |
+| `index`, `context` | `repo` is not `owner/name` (two non-empty segments) | `error: repository must be in owner/name format` |
+| `search`, `context` | `--format` other than `console`/`json` | `error: unknown --format '<value>' (console\|json)` |
+| `search` | empty `query` AND no usable `--files` | `error: search requires text or --files` |
+| `context` | The PR is not in the memory | `error: PR <owner>/<name>#<n> is not indexed; run 'reviewmemory index' first` |
 
-Orden de validación en `search`: primero `--format`, luego texto/archivos. En `context`: primero `--format`, luego formato de `repo`, luego la consulta a BD. Un fallo de conexión a Postgres (puerto caído) es exit 1: p. ej. `error: Failed to connect to 127.0.0.1:5999`.
+Validation order in `search`: first `--format`, then text/files. In `context`: first `--format`, then repo format, then the database query. A Postgres connection failure (down port) is exit 1: e.g. `error: Failed to connect to 127.0.0.1:5999`.
 
-## Salida de index
+## index output
 
-Una línea por PR a medida que se procesa (visibilidad durante corridas largas), seguida de un resumen final:
-
-```
-#11 feat(search): content search on webhook body → 1 discusión(es)
-Indexados 1 PRs · 1 discusiones · 0 decisiones con desenlace
-```
-
-El resumen cuenta PRs procesados, hilos totales e hilos con decisión inferida distinta de `unknown`. Todo va a stdout; los errores van a stderr.
-
-## Salida console (search / context)
-
-`context` antepone un header con el estado del PR (solo en formato console; `json` no lo emite) seguido de una línea en blanco:
+One line per PR as it is processed (visibility during long runs), followed by a final summary:
 
 ```
-MERGED PR #1 «feat(ui): Next.js UI — endpoints, webhook feed, detail viewer, replay» (Steve-XYZ)
+#11 feat(search): content search on webhook body → 1 discussion(s)
+Indexed 1 PRs · 1 discussions · 0 decisions with outcome
 ```
 
-Después, ambos comandos renderizan igual (`SearchRenderer`):
+The summary counts processed PRs, total threads, and threads with an inferred decision other than `unknown`. Everything goes to stdout; errors go to stderr.
+
+## console output (search / context)
+
+`context` prepends a header with the PR state (console format only; `json` does not emit it) followed by a blank line:
 
 ```
-N discusión(es) históricamente relevante(s)
+MERGED PR #1 "feat(ui): Next.js UI — endpoints, webhook feed, detail viewer, replay" (Steve-XYZ)
+```
+
+Afterwards, both commands render identically (`SearchRenderer`):
+
+```
+N historically relevant discussion(s)
 
 1. HIGH — Provider callbacks could be processed twice.
-   Similitud: 0.91
+   Similarity: 0.91
    PR #1943 (Shirka-Corporation/player-manager) · 2026-03-10
    File: src/AdJoePayoutHandler.cs:120
 
-   Preocupación previa del reviewer:
-   <finding en una línea, truncado a 240 caracteres>
+   Previous reviewer concern:
+   <finding on one line, truncated to 240 characters>
 
-   Resolución: Finding aceptado — se corrigió la implementación. <razón>
+   Resolution: Finding accepted — implementation was fixed. <reason>
    https://github.com/<owner>/<name>/pull/<n>#discussion_r<id>
 ```
 
-Sin resultados: `0 discusiones relevantes encontradas`.
+No results: `0 relevant discussions found`.
 
-Detalles:
+Details:
 
-- La banda sale del score combinado (texto 0.55 + solapamiento 0.30 + recencia 0.15): `HIGH` ≥ 0.65, `MEDIUM` ≥ 0.40, si no `LOW`.
-- `Similitud` es el score con dos decimales.
-- La primera línea del finding de cada hit trunca a 72 caracteres con elipsis `…`; el título del PR no aparece en la salida console (solo en JSON como `prTitle`).
-- `File:` omite `:<línea>` cuando el hilo no tiene posición.
-- `Resolución:` solo aparece si el desenlace no es `unknown` o hay razón. Etiquetas: `Finding aceptado — se corrigió la implementación` / `Finding rechazado` / `Finding parcialmente aceptado` / `Desenlace desconocido`.
+- The band comes from the combined score (text 0.55 + overlap 0.30 + recency 0.15): `HIGH` ≥ 0.65, `MEDIUM` ≥ 0.40, otherwise `LOW`.
+- `Similarity` is the score with two decimals.
+- Each hit's finding first line truncates to 72 characters with ellipsis `…`; the PR title does not appear in console output (only in JSON as `prTitle`).
+- `File:` omits `:<line>` when the thread has no position.
+- `Resolution:` only appears if the outcome is not `unknown` or there is a reason. Labels: `Finding accepted — implementation was fixed` / `Finding rejected` / `Finding partially accepted` / `Unknown outcome`.
 
-## Salida json
+## json output
 
-Serialización de la lista de hits con `System.Text.Json`: indentada, propiedades en camelCase, enums como strings camelCase, campos nulos omitidos (`reason` y `line` desaparecen cuando son null). Campos por hit:
+Serialization of the hit list with `System.Text.Json`: indented, camelCase properties, enums as camelCase strings, null fields omitted (`reason` and `line` disappear when null). Fields per hit:
 
-| Campo | Tipo | Descripción |
+| Field | Type | Description |
 |---|---|---|
-| `threadId` | long | Id del comentario raíz del hilo |
+| `threadId` | long | Id of the thread's root comment |
 | `repo` | string | `owner/name` |
-| `number` | int | Número del PR |
-| `prTitle` | string | Título del PR |
-| `path` | string | Archivo del finding |
-| `line` | int? | Posición en el diff; ausente si es null |
-| `finding` | string | Cuerpo completo del comentario del reviewer |
+| `number` | int | PR number |
+| `prTitle` | string | PR title |
+| `path` | string | File of the finding |
+| `line` | int? | Position in the diff; absent when null |
+| `finding` | string | Full body of the reviewer's comment |
 | `outcome` | string | `accepted` \| `rejected` \| `partiallyAccepted` \| `unknown` |
-| `reason` | string? | Razón inferida; ausente si es null |
-| `score` | double | Score combinado sin redondear |
-| `createdAt` | datetime | ISO 8601 con offset (`2026-08-22T02:37:24+00:00`) |
+| `reason` | string? | Inferred reason; absent when null |
+| `score` | double | Combined score, unrounded |
+| `createdAt` | datetime | ISO 8601 with offset (`2026-08-22T02:37:24+00:00`) |
 | `url` | string | `https://github.com/{repo}/pull/{number}#discussion_r{threadId}` |
 
 ```json
@@ -173,75 +173,75 @@ Serialización de la lista de hits con `System.Text.Json`: indentada, propiedade
 ]
 ```
 
-Este schema es el contrato para agentes y para el futuro MCP server: los cambios rompientes requieren actualizar esta spec en el mismo PR.
+This schema is the contract for agents and for the future MCP server: breaking changes require updating this spec in the same PR.
 
-## Requisitos previos
+## Prerequisites
 
 ```bash
-docker compose up -d db   # postgres:17 en localhost:5433, container review-memory-db
+docker compose up -d db   # postgres:17 at localhost:5433, container review-memory-db
 ```
 
-El compose define healthcheck `pg_isready -U reviewmemory -d reviewmemory` (cada 5 s, 10 reintentos). Credenciales por defecto: BD `reviewmemory`, usuario/password `reviewmemory`. Sin la BD levantada, los tres comandos fallan con exit 1 y `error: <mensaje de Npgsql>` en stderr.
+The compose defines healthcheck `pg_isready -U reviewmemory -d reviewmemory` (every 5 s, 10 retries). Default credentials: database `reviewmemory`, user/password `reviewmemory`. Without the DB running, all three commands fail with exit 1 and `error: <Npgsql message>` on stderr.
 
-`GITHUB_TOKEN` solo es necesario para `index`. `search` y `context` funcionan sin token ni red.
+`GITHUB_TOKEN` is only needed for `index`. `search` and `context` work without token or network.
 
-## Ejemplos
+## Examples
 
-Verificados contra el binario (`dotnet run --project src/ReviewMemory.Cli -- …`):
+Verified against the binary (`dotnet run --project src/ReviewMemory.Cli -- …`):
 
 ```bash
-# ayuda global y por comando (-?, -h, --help y --version los aporta System.CommandLine)
+# global and per-command help (-?, -h, --help and --version come from System.CommandLine)
 dotnet run --project src/ReviewMemory.Cli -- --help
 dotnet run --project src/ReviewMemory.Cli -- context --help
 
-# previo: levantar la BD local
+# prerequisite: start the local database
 docker compose up -d db
 
-# indexar los últimos 200 PRs (default)
-export GITHUB_TOKEN=ghp_xxx   # recomendado: sin token, 60 req/h
+# index the last 200 PRs (default)
+export GITHUB_TOKEN=ghp_xxx   # recommended: without token, 60 req/h
 dotnet run --project src/ReviewMemory.Cli -- index Shirka-Corporation/player-manager
 
-# indexar solo los últimos 50, con token explícito
+# index only the last 50, with explicit token
 dotnet run --project src/ReviewMemory.Cli -- index Steve-XYZ/webhook-replay --last=50 --token ghp_xxx
 
-# buscar por texto libre, acotado a un repo
+# search by free text, scoped to one repo
 dotnet run --project src/ReviewMemory.Cli -- search "duplicate lotto transaction" --repo Shirka-Corporation/player-manager
 
-# buscar por archivos tocados (csv para varias rutas)
+# search by touched files (csv for multiple paths)
 dotnet run --project src/ReviewMemory.Cli -- search "retry idempotency" --files src/LottoPendingTransactionProcessor.cs
 
-# salida serializada para agentes
+# serialized output for agents
 dotnet run --project src/ReviewMemory.Cli -- search "signature digest" --format json
 
-# contexto histórico de un PR, top 3, excluyendo sus propias discusiones
+# historical context of a PR, top 3, excluding its own discussions
 dotnet run --project src/ReviewMemory.Cli -- context Steve-XYZ/webhook-replay --pr 1 --limit=3
 
-# apuntar a otra BD sin tocar el entorno
+# point to another database without touching the environment
 dotnet run --project src/ReviewMemory.Cli -- search "x" \
   --connection-string "Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory"
 ```
 
-Rutas de error verificadas (todas exit 2 salvo la última, exit 1):
+Verified error paths (all exit 2 except the last, exit 1):
 
 ```bash
-dotnet run --project src/ReviewMemory.Cli -- index owner           # error: el repositorio debe tener el formato owner/name
-dotnet run --project src/ReviewMemory.Cli -- search ""             # error: la búsqueda requiere texto o --files
-dotnet run --project src/ReviewMemory.Cli -- search x --format xml # error: --format desconocido 'xml' (console|json)
-dotnet run --project src/ReviewMemory.Cli -- context a/b --pr 999  # error: el PR a/b#999 no está indexado; ejecuta 'reviewmemory index' primero
-dotnet run --project src/ReviewMemory.Cli -- context a/b           # Option '--pr' is required. + ayuda (exit 1)
+dotnet run --project src/ReviewMemory.Cli -- index owner           # error: repository must be in owner/name format
+dotnet run --project src/ReviewMemory.Cli -- search ""             # error: search requires text or --files
+dotnet run --project src/ReviewMemory.Cli -- search x --format xml # error: unknown --format 'xml' (console|json)
+dotnet run --project src/ReviewMemory.Cli -- context a/b --pr 999  # error: PR a/b#999 is not indexed; run 'reviewmemory index' first
+dotnet run --project src/ReviewMemory.Cli -- context a/b           # Option '--pr' is required. + help (exit 1)
 ```
 
-## Criterios de aceptación (siguiente iteración CLI)
+## Acceptance criteria (next CLI iteration)
 
-1. **Spec como contrato**: toda opción, default y mensaje de esta spec coincide con el binario; un smoke test que ejecute `--help` de cada comando y las cinco rutas de error anteriores debe seguir pasando tras cualquier cambio en `Program.cs`. Cambiar un mensaje obliga a actualizar esta spec en el mismo PR. Cubierto por `tests/ReviewMemory.Cli.Tests`, que ejecuta el binario real como subproceso.
-2. **Exit codes estables**: 0 éxito, 1 parsing/tiempo de ejecución, 2 uso inválido. CI verifica los tres vía `dotnet test` (`tests/ReviewMemory.Cli.Tests`).
-3. **JSON estable**: mismos campos camelCase, enums como strings camelCase, nulos omitidos. Es el schema que consumirán agentes y MCP server; cambios rompientes requieren nota explícita.
-4. **`context` preserva su semántica**: excluye las discusiones del propio PR, exige `--pr`, y el header solo aparece en formato console.
-5. **Degradación sin token**: `index` funciona anónimo (60 req/h) y agota rate limit como exit 1 con `error: <mensaje>` en stderr, nunca un crash sin capturar.
-6. **Ejemplos copiables**: los bloques de ejemplos de esta spec y del README siguen ejecutándose tal cual en un checkout limpio con `docker compose up -d db`.
+1. **Spec as contract**: every option, default, and message in this spec matches the binary; a smoke test running `--help` of each command and the five previous error paths must keep passing after any change to `Program.cs`. Changing a message requires updating this spec in the same PR. Covered by `tests/ReviewMemory.Cli.Tests`, which runs the real binary as a subprocess.
+2. **Stable exit codes**: 0 success, 1 parsing/runtime, 2 invalid usage. CI verifies all three via `dotnet test` (`tests/ReviewMemory.Cli.Tests`).
+3. **Stable JSON**: same camelCase fields, enums as camelCase strings, nulls omitted. It is the schema agents and the MCP server will consume; breaking changes require an explicit note.
+4. **`context` preserves its semantics**: excludes the PR's own discussions, requires `--pr`, and the header only appears in console format.
+5. **Degradation without token**: `index` works anonymously (60 req/h) and exhausting the rate limit is exit 1 with `error: <message>` on stderr, never an uncaught crash.
+6. **Copyable examples**: the example blocks in this spec and the README keep running verbatim on a clean checkout with `docker compose up -d db`.
 
-## Decisiones
+## Decisions
 
-- **Los defaults son los de `Program.cs`, no los de los ejemplos**: `--limit` vale 10 también en `context`; el README usa `--limit 5` explícito en su ejemplo, no como default.
-- **Errores de parsing (System.CommandLine) son exit 1, no 2**: el exit 2 queda reservado a las validaciones de dominio con mensajes propios; el texto bruto de la librería no se traduce.
-- **Salida de `index` sin `--format`**: el progreso línea a línea ya es consumible; un modo json de index se decide cuando exista un consumidor real.
+- **Defaults are `Program.cs`'s, not the examples'**: `--limit` is 10 in `context` too; the README uses an explicit `--limit 5` in its example, not as a default.
+- **Parse errors (System.CommandLine) are exit 1, not 2**: exit 2 stays reserved for domain validations with their own messages; the library's raw text is not translated.
+- **`index` output without `--format`**: the line-by-line progress is already consumable; a json mode for index will be decided when a real consumer exists.

@@ -9,10 +9,10 @@ using ReviewMemory.Storage;
 namespace ReviewMemory.Mcp;
 
 /// <summary>
-/// Ejecuta las dos operaciones de lectura sobre la memoria (search y context)
-/// reutilizando Core/Storage y devolviendo el mismo JSON que el CLI con
-/// --format json. Los fallos se reportan como error estructurado del tool;
-/// nunca propagan una excepción que tumbe el proceso.
+/// Executes the two read operations over the memory (search and context)
+/// reusing Core/Storage and returning the same JSON as the CLI with
+/// --format json. Failures are reported as structured tool errors;
+/// they never propagate an exception that would take the process down.
 /// </summary>
 public sealed class MemoryService(Func<string?>? connectionStringResolver = null)
 {
@@ -35,7 +35,7 @@ public sealed class MemoryService(Func<string?>? connectionStringResolver = null
         var paths = ParseFiles(files);
         if (string.IsNullOrWhiteSpace(query) && paths.Length == 0)
         {
-            return Error("invalid_search", "la búsqueda requiere texto o --files");
+            return Error("invalid_search", "search requires text or --files");
         }
 
         return await RunAsync(async dataSource =>
@@ -51,7 +51,7 @@ public sealed class MemoryService(Func<string?>? connectionStringResolver = null
     {
         if (ParseRepo(repo) is not { } parsed)
         {
-            return Error("invalid_repo", "el repositorio debe tener el formato owner/name");
+            return Error("invalid_repo", "repository must be in owner/name format");
         }
 
         var canonical = $"{parsed.Owner}/{parsed.Name}";
@@ -63,7 +63,7 @@ public sealed class MemoryService(Func<string?>? connectionStringResolver = null
             {
                 return Error(
                     "pr_not_indexed",
-                    $"el PR {canonical}#{pr} no está indexado; ejecuta 'reviewmemory index' primero");
+                    $"PR {canonical}#{pr} is not indexed; run 'reviewmemory index' first");
             }
 
             var hits = await search.ContextForPullRequestAsync(

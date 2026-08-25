@@ -10,13 +10,13 @@ namespace ReviewMemory.Storage;
 public sealed class IndexRepository(NpgsqlDataSource dataSource)
 {
     /// <summary>
-    /// Indexa o re-indexa un PR completo de forma transaccional, conciliando
-    /// los hilos entrantes contra los existentes por id de GitHub y hash de
-    /// contenido: inserta nuevos, actualiza modificados (con sus comentarios),
-    /// deja intactos los sin cambio y borra los que ya no existen en GitHub.
-    /// La inferencia de decisión solo corre sobre hilos nuevos o modificados
-    /// y nunca sobrescribe una decisión manual. Devuelve cuántas discusiones
-    /// quedaron almacenadas y cuántas decisiones con desenlace tiene el PR.
+    /// Indexes or re-indexes a whole PR transactionally, reconciling
+    /// incoming threads against existing ones by GitHub id and content
+    /// hash: inserts new ones, updates changed ones (with their comments),
+    /// leaves unchanged ones intact and deletes those no longer on GitHub.
+    /// Decision inference only runs on new or changed threads and never
+    /// overwrites a manual decision. Returns how many discussions were
+    /// stored and how many decisions with outcome the PR has.
     /// </summary>
     public async Task<(int Threads, int Decisions)> UpsertAsync(
         PullRequestData pullRequest, CancellationToken cancellationToken = default)
@@ -194,8 +194,8 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
     }
 
     /// <summary>
-    /// Borra los hilos del PR ausentes del listado entrante (la cascada elimina
-    /// sus comentarios y decisiones); con la lista vacía borra todos.
+    /// Deletes the PR's threads absent from the incoming list (the cascade removes
+    /// their comments and decisions); with an empty list it deletes all of them.
     /// </summary>
     private static async Task DeleteThreadsNotInAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction,
@@ -293,7 +293,7 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
         }
     }
 
-    /// <summary>Indica si el hilo ya tiene una decisión corregida por un humano.</summary>
+    /// <summary>Whether the thread already has a human-corrected decision.</summary>
     private static async Task<bool> IsManualDecisionAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction,
         long threadId, CancellationToken cancellationToken)
@@ -345,13 +345,13 @@ public sealed class IndexRepository(NpgsqlDataSource dataSource)
     }
 
     /// <summary>
-    /// SHA256 en hex minúscula del contenido visible del hilo; permite detectar
-    /// cambios entre indexaciones sin ids ni timestamps. Formato determinista
-    /// "reviewmemory-thread-v1": campos separados por '\n' con '\' escapado como
-    /// '\\', '\r' como '\r' y '\n' como '\n'. Campos en orden: versión, path,
-    /// line (vacía si es null), resolved ("true"/"false"), autor y cuerpo del
-    /// finding, y luego autor y cuerpo de cada respuesta ordenada por CreatedAt
-    /// (empate: Id).
+    /// Lowercase hex SHA256 of the thread's visible content; detects changes
+    /// between indexations without ids or timestamps. Deterministic format
+    /// "reviewmemory-thread-v1": fields separated by '\n' with '\' escaped as
+    /// '\\', '\r' as '\r' and '\n' as '\n'. Fields in order: version, path,
+    /// line (empty when null), resolved ("true"/"false"), author and body of the
+    /// finding, then author and body of each reply ordered by CreatedAt
+    /// (tie-break: Id).
     /// </summary>
     private static string ContentHash(ReviewThreadData thread)
     {

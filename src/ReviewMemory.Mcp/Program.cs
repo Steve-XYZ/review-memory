@@ -6,11 +6,11 @@ var options = new McpServerOptions
 {
     ServerInfo = new Implementation { Name = "reviewmemory", Version = "1.0.0" },
     ServerInstructions = """
-        Servidor MCP de ReviewMemory: memoria institucional de code review.
-        Antes de revisar un PR, consulta 'context' de ese PR y usa 'search'
-        para recuperar decisiones previas del equipo por texto o archivos.
-        Ambos tools son de solo lectura; la memoria se alimenta con el comando
-        index del CLI, nunca desde este servidor.
+        ReviewMemory MCP server: institutional memory for code review.
+        Before reviewing a PR, query its 'context' and use 'search'
+        to retrieve the team's prior decisions by text or files.
+        Both tools are read-only; the memory is fed with the CLI's
+        index command, never from this server.
         """,
     Capabilities = new ServerCapabilities
     {

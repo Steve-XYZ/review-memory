@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: reviewmemory
       POSTGRES_PASSWORD: reviewmemory
     ports:
-      # el 5432 local suele estar ocupado por otras BD de desarrollo
+      # local 5432 is often taken by other dev databases
       - "5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data

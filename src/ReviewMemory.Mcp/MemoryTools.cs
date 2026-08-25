@@ -4,8 +4,8 @@ using ModelContextProtocol.Server;
 namespace ReviewMemory.Mcp;
 
 /// <summary>
-/// Registro de los dos tools de lectura del servidor. Solo lectura por diseño:
-/// la memoria se alimenta con el comando index del CLI, nunca desde el agente.
+/// Registration of the server's two read tools. Read-only by design:
+/// the memory is fed with the CLI's index command, never from the agent.
 /// </summary>
 public static class MemoryTools
 {
@@ -14,13 +14,13 @@ public static class MemoryTools
         McpServerTool.Create(service.SearchAsync, new McpServerToolCreateOptions
         {
             Name = "search",
-            Title = "Búsqueda histórica",
+            Title = "Historical search",
             Description = """
-                Busca discusiones históricas de code review por texto libre y/o archivos tocados.
-                Parámetros: query (texto libre), repo (filtro opcional owner/name), files (rutas
-                opcionales, admite lista o csv) y limit (default 10). Devuelve exactamente el mismo
-                JSON que 'reviewmemory search --format json': un array de hits con threadId, repo,
-                number, prTitle, path, line, finding, outcome, reason, score, createdAt y url.
+                Searches historical code review discussions by free text and/or touched files.
+                Parameters: query (free text), repo (optional owner/name filter), files (optional
+                paths, accepts a list or csv) and limit (default 10). Returns exactly the same
+                JSON as 'reviewmemory search --format json': an array of hits with threadId, repo,
+                number, prTitle, path, line, finding, outcome, reason, score, createdAt and url.
                 """,
             ReadOnly = true,
             Idempotent = true,
@@ -29,12 +29,12 @@ public static class MemoryTools
         McpServerTool.Create(service.ContextAsync, new McpServerToolCreateOptions
         {
             Name = "context",
-            Title = "Contexto histórico de un PR",
+            Title = "Historical context for a PR",
             Description = """
-                Recupera las discusiones históricas relevantes para un PR concreto, excluyendo las
-                del propio PR. Parámetros: repo (owner/name, requerido), pr (número, requerido) y
-                limit (default 10). El PR debe estar indexado previamente con 'reviewmemory index'.
-                Devuelve exactamente el mismo JSON que 'reviewmemory context --format json'.
+                Retrieves the historical discussions relevant for a specific PR, excluding those
+                of the PR itself. Parameters: repo (owner/name, required), pr (number, required) and
+                limit (default 10). The PR must be indexed beforehand with 'reviewmemory index'.
+                Returns exactly the same JSON as 'reviewmemory context --format json'.
                 """,
             ReadOnly = true,
             Idempotent = true,

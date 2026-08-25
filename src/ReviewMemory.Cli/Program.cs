@@ -5,27 +5,27 @@ using ReviewMemory.GitHub;
 using ReviewMemory.Storage;
 
 var lastOption = new Option<int>("--last") { DefaultValueFactory = _ => 200 };
-var tokenOption = new Option<string?>("--token") { Description = "GitHub token; por defecto usa la variable GITHUB_TOKEN" };
+var tokenOption = new Option<string?>("--token") { Description = "GitHub token; defaults to the GITHUB_TOKEN environment variable" };
 var connectionStringOption = new Option<string?>("--connection-string")
 {
-    Description = "Conexión Postgres; por defecto usa REVIEWMEMORY_CONNECTIONSTRING o la BD local de docker-compose",
+    Description = "Postgres connection; defaults to REVIEWMEMORY_CONNECTIONSTRING or the docker-compose local database",
 };
-var repoOption = new Option<string?>("--repo") { Description = "Filtra por repositorio owner/name" };
-var filesOption = new Option<string?>("--files") { Description = "Rutas separadas por coma para búsqueda por solapamiento" };
+var repoOption = new Option<string?>("--repo") { Description = "Filters by owner/name repository" };
+var filesOption = new Option<string?>("--files") { Description = "Comma-separated paths for overlap-based search" };
 var limitOption = new Option<int>("--limit") { DefaultValueFactory = _ => 10 };
-var prOption = new Option<int>("--pr") { Required = true, Description = "Número del PR a contextualizar" };
+var prOption = new Option<int>("--pr") { Required = true, Description = "Number of the PR to contextualize" };
 var formatOption = new Option<string>("--format") { DefaultValueFactory = _ => "console" };
 
-var repoArgument = new Argument<string>("repo") { Description = "Repositorio en formato owner/name" };
-var queryArgument = new Argument<string>("query") { Description = "Texto libre a buscar en el historial de reviews" };
+var repoArgument = new Argument<string>("repo") { Description = "Repository in owner/name format" };
+var queryArgument = new Argument<string>("query") { Description = "Free text to search in the review history" };
 
-var indexCommand = new Command("index", "Descarga y indexa los PRs recientes de un repositorio");
+var indexCommand = new Command("index", "Downloads and indexes the recent PRs of a repository");
 indexCommand.Add(repoArgument);
 indexCommand.Add(lastOption);
 indexCommand.Add(tokenOption);
 indexCommand.Add(connectionStringOption);
 
-var searchCommand = new Command("search", "Busca discusiones históricas de review por texto y/o archivos");
+var searchCommand = new Command("search", "Searches historical review discussions by text and/or files");
 searchCommand.Add(queryArgument);
 searchCommand.Add(repoOption);
 searchCommand.Add(filesOption);
@@ -33,14 +33,14 @@ searchCommand.Add(limitOption);
 searchCommand.Add(formatOption);
 searchCommand.Add(connectionStringOption);
 
-var contextCommand = new Command("context", "Recupera el contexto histórico relevante para un PR concreto");
+var contextCommand = new Command("context", "Retrieves the relevant historical context for a specific PR");
 contextCommand.Add(repoArgument);
 contextCommand.Add(prOption);
 contextCommand.Add(limitOption);
 contextCommand.Add(formatOption);
 contextCommand.Add(connectionStringOption);
 
-var rootCommand = new RootCommand("ReviewMemory: memoria institucional de code review para cualquier reviewer");
+var rootCommand = new RootCommand("ReviewMemory: institutional code review memory for any reviewer");
 rootCommand.Add(indexCommand);
 rootCommand.Add(searchCommand);
 rootCommand.Add(contextCommand);
@@ -82,7 +82,7 @@ indexCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     if (ParseRepo(parseResult.GetValue(repoArgument)!) is not { } repo)
     {
-        Console.Error.WriteLine("error: el repositorio debe tener el formato owner/name");
+        Console.Error.WriteLine("error: repository must be in owner/name format");
         return usageError;
     }
 
@@ -91,7 +91,7 @@ indexCommand.SetAction(async (parseResult, cancellationToken) =>
         await using var dataSource = await OpenDatabaseAsync(parseResult.GetValue(connectionStringOption));
         var source = new GitHubPullRequestSource(
             ResolveToken(parseResult.GetValue(tokenOption)),
-            reason => Console.Error.WriteLine($"aviso: no se pudo obtener resolved vía GraphQL: {reason}"));
+            reason => Console.Error.WriteLine($"warning: could not fetch resolved state via GraphQL: {reason}"));
         var index = new IndexRepository(dataSource);
 
         var pullRequests = 0;
@@ -105,11 +105,11 @@ indexCommand.SetAction(async (parseResult, cancellationToken) =>
             pullRequests++;
             threads += threadCount;
             decisions += decisionCount;
-            Console.Out.WriteLine($"#{pullRequest.Number} {pullRequest.Title} → {threadCount} discusión(es)");
+            Console.Out.WriteLine($"#{pullRequest.Number} {pullRequest.Title} → {threadCount} discussion(s)");
         }
 
         Console.Out.WriteLine($"""
-            Indexados {pullRequests} PRs · {threads} discusiones · {decisions} decisiones con desenlace
+            Indexed {pullRequests} PRs · {threads} discussions · {decisions} decisions with outcome
             """);
         return 0;
     }
@@ -128,13 +128,13 @@ searchCommand.SetAction(async (parseResult, cancellationToken) =>
 
     if (!ValidFormat(format))
     {
-        Console.Error.WriteLine($"error: --format desconocido '{format}' (console|json)");
+        Console.Error.WriteLine($"error: unknown --format '{format}' (console|json)");
         return usageError;
     }
 
     if (queryText.Trim().Length == 0 && paths.Length == 0)
     {
-        Console.Error.WriteLine("error: la búsqueda requiere texto o --files");
+        Console.Error.WriteLine("error: search requires text or --files");
         return usageError;
     }
 
@@ -164,13 +164,13 @@ contextCommand.SetAction(async (parseResult, cancellationToken) =>
 
     if (!ValidFormat(format))
     {
-        Console.Error.WriteLine($"error: --format desconocido '{format}' (console|json)");
+        Console.Error.WriteLine($"error: unknown --format '{format}' (console|json)");
         return usageError;
     }
 
     if (ParseRepo(parseResult.GetValue(repoArgument)!) is not { } repo)
     {
-        Console.Error.WriteLine("error: el repositorio debe tener el formato owner/name");
+        Console.Error.WriteLine("error: repository must be in owner/name format");
         return usageError;
     }
 
@@ -183,7 +183,7 @@ contextCommand.SetAction(async (parseResult, cancellationToken) =>
         var summary = await search.GetPullRequestAsync(repo.Owner + "/" + repo.Name, number, cancellationToken);
         if (summary is null)
         {
-            Console.Error.WriteLine($"error: el PR {repo.Owner}/{repo.Name}#{number} no está indexado; ejecuta 'reviewmemory index' primero");
+            Console.Error.WriteLine($"error: PR {repo.Owner}/{repo.Name}#{number} is not indexed; run 'reviewmemory index' first");
             return usageError;
         }
 
@@ -195,7 +195,7 @@ contextCommand.SetAction(async (parseResult, cancellationToken) =>
 
         if (format is "console")
         {
-            Console.Out.WriteLine($"{summary.State.ToUpperInvariant()} PR #{summary.Number} «{summary.Title}» ({summary.Author})");
+            Console.Out.WriteLine($"{summary.State.ToUpperInvariant()} PR #{summary.Number} \"{summary.Title}\" ({summary.Author})");
             Console.Out.WriteLine();
         }
 

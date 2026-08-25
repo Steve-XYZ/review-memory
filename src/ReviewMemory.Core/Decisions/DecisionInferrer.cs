@@ -22,9 +22,9 @@ public enum DecisionConfidence
 }
 
 /// <summary>
-/// Infiere el desenlace de una discusión de review a partir de las respuestas.
-/// Etapa 1: señales léxicas deterministas, sin IA. Las respuestas del autor
-/// del PR pesan más que las del reviewer (el autor es quien actúa).
+/// Infers a review discussion's outcome from its replies.
+/// Stage 1: deterministic lexical signals, no AI. Replies from the PR
+/// author weigh more than those from the reviewer (the author is who acts).
 /// </summary>
 public static partial class DecisionInferrer
 {
@@ -59,7 +59,7 @@ public static partial class DecisionInferrer
             var other = acceptance ?? partial!;
             return new Decision(
                 DecisionOutcome.Unknown,
-                $"señales contradictorias — {Describe(rejection)} / {Describe(other)}",
+                $"contradictory signals — {Describe(rejection)} / {Describe(other)}",
                 DecisionConfidence.Inferred);
         }
 
@@ -85,7 +85,7 @@ public static partial class DecisionInferrer
         comments.FirstOrDefault(c => pattern.IsMatch(c.Body));
 
     private static string Describe(ReviewCommentData comment) =>
-        $"respuesta de {comment.Author}: \"{Truncate(comment.Body.Trim(), 120)}\"";
+        $"response from {comment.Author}: \"{Truncate(comment.Body.Trim(), 120)}\"";
 
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..(maxLength - 1)] + "…";

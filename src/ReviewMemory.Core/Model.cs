@@ -54,8 +54,8 @@ public sealed record PullRequestData(
     IReadOnlyList<ReviewThreadData> Threads);
 
 /// <summary>
-/// Fuente de historial de PRs. La implementación productiva habla con la API
-/// de GitHub; las pruebas pueden alimentar repositorios en memoria.
+/// Source of PR history. The production implementation talks to the GitHub
+/// API; tests can feed in-memory repositories.
 /// </summary>
 public interface IPullRequestSource
 {

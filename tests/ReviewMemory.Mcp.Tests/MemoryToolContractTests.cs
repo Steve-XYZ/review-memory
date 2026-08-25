@@ -6,8 +6,8 @@ using ReviewMemory.Mcp;
 namespace ReviewMemory.Mcp.Tests;
 
 /// <summary>
-/// Contrato del servidor MCP según docs/specs/06-roadmap.md §3: dos tools de
-/// solo lectura (search y context), error estructurado sin crash cuando no hay BD.
+/// MCP server contract per docs/specs/06-roadmap.md §3: two read-only tools
+/// (search and context), structured error without crash when there is no DB.
 /// </summary>
 public sealed class MemoryToolContractTests
 {
@@ -17,7 +17,7 @@ public sealed class MemoryToolContractTests
     private static MemoryService Service() => new(() => Unreachable);
 
     [Fact]
-    public void Registra_exactamente_search_y_context_en_solo_lectura()
+    public void Registers_exactly_search_and_context_as_read_only()
     {
         var tools = MemoryTools.CreateCollection(Service());
 
@@ -32,7 +32,7 @@ public sealed class MemoryToolContractTests
     }
 
     [Fact]
-    public void Search_exige_query_y_context_exige_repo_y_pr_en_el_schema()
+    public void Search_requires_query_and_context_requires_repo_and_pr_in_schema()
     {
         var tools = MemoryTools.CreateCollection(Service()).ToDictionary(t => t.ProtocolTool.Name);
 
@@ -41,7 +41,7 @@ public sealed class MemoryToolContractTests
     }
 
     [Fact]
-    public async Task Search_sin_texto_ni_archivos_devuelve_error_estructurado()
+    public async Task Search_without_text_or_files_returns_structured_error()
     {
         var result = await Service().SearchAsync("   ");
 
@@ -50,7 +50,7 @@ public sealed class MemoryToolContractTests
     }
 
     [Fact]
-    public async Task Context_con_repo_malformado_devuelve_error_estructurado()
+    public async Task Context_with_malformed_repo_returns_structured_error()
     {
         var result = await Service().ContextAsync("no-tiene-formato-owner-name", 1);
 
@@ -59,7 +59,7 @@ public sealed class MemoryToolContractTests
     }
 
     [Fact]
-    public async Task Base_datos_inalcanzable_en_search_devuelve_error_estructurado()
+    public async Task Unreachable_database_on_search_returns_structured_error()
     {
         var result = await Service().SearchAsync("provider transaction twice");
 
@@ -68,7 +68,7 @@ public sealed class MemoryToolContractTests
     }
 
     [Fact]
-    public async Task Base_datos_inalcanzable_en_context_devuelve_error_estructurado()
+    public async Task Unreachable_database_on_context_returns_structured_error()
     {
         var result = await Service().ContextAsync("owner/name", 1);
 

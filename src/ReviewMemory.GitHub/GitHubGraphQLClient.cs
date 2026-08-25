@@ -5,23 +5,23 @@ using System.Text.Json;
 namespace ReviewMemory.GitHub;
 
 /// <summary>
-/// Error de nivel GraphQL (payload con <c>errors</c> sin datos utilizables o
-/// respuesta HTTP no satisfactoria, incluido el rate limit). El llamador lo
-/// trata como motivo de degradación.
+/// GraphQL-level error (payload with <c>errors</c> and no usable data, or
+/// non-success HTTP response, including rate limit). The caller treats it
+/// as a degradation reason.
 /// </summary>
 public sealed class GitHubGraphQlException(string message) : Exception(message);
 
 /// <summary>
-/// Cliente mínimo de la API GraphQL v4 de GitHub sobre HttpClient propio y
-/// System.Text.Json. Solo expone lo que la ingesta necesita: el estado
-/// <c>isResolved</c> de los hilos de review, que la API REST v3 no publica.
+/// Minimal client for GitHub's GraphQL v4 API over its own HttpClient and
+/// System.Text.Json. Only exposes what ingestion needs: the <c>isResolved</c>
+/// state of review threads, which the REST v3 API does not publish.
 ///
-/// Cruce de ids: el nodo GraphQL trae un id opaco (<c>PRRT_…</c>) que no
-/// coincide con el id numérico que ReviewMemory usa como identidad del hilo
-/// (el id REST v3 del comentario raíz). Por eso cada hilo pide su primer
-/// comentario —la conexión llega en orden cronológico y el primero es el que
-/// abrió el hilo— y se cruza por su <c>databaseId</c>, el mismo id numérico
-/// que la API REST usa para ese comentario.
+/// Id cross-referencing: the GraphQL node carries an opaque id (<c>PRRT_…</c>) that does
+/// not match the numeric id ReviewMemory uses as thread identity (the REST v3
+/// id of the root comment). So each thread requests its first comment —replies
+/// arrive in chronological order and the first is the one that opened the
+/// thread— and is cross-referenced by its <c>databaseId</c>, the same numeric id
+/// the REST API uses for that comment.
 /// </summary>
 public sealed class GitHubGraphQLClient
 {
@@ -58,10 +58,10 @@ public sealed class GitHubGraphQLClient
     }
 
     /// <summary>
-    /// Devuelve el estado resolved de cada hilo del PR, indexado por el id del
-    /// comentario raíz (el mismo valor que <see cref="Core.ReviewThreadData.Id"/>).
-    /// Lanza <see cref="HttpRequestException"/> ante fallo HTTP y
-    /// <see cref="GitHubGraphQlException"/> ante errores o rate limit de GraphQL.
+    /// Returns each thread's resolved state of the PR, indexed by the root
+    /// comment id (the same value as <see cref="Core.ReviewThreadData.Id"/>).
+    /// Throws <see cref="HttpRequestException"/> on HTTP failure and
+    /// <see cref="GitHubGraphQlException"/> on GraphQL errors or rate limit.
     /// </summary>
     public async Task<IReadOnlyDictionary<long, bool>> GetResolvedByRootCommentAsync(
         string owner, string name, int number, CancellationToken cancellationToken = default)
@@ -94,7 +94,7 @@ public sealed class GitHubGraphQLClient
 
             if (!root.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
             {
-                throw new GitHubGraphQlException(FirstError(root) ?? "respuesta sin datos");
+                throw new GitHubGraphQlException(FirstError(root) ?? "response without data");
             }
 
             var threads = Navigate(data, "repository", "pullRequest", "reviewThreads");

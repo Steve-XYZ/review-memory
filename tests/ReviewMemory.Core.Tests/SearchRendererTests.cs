@@ -15,15 +15,15 @@ public sealed class SearchRendererTests
         Line: 120,
         Finding: "Provider callbacks could be processed twice.",
         Outcome: DecisionOutcome.Accepted,
-        Reason: "respuesta de dev: \"fixed with idempotency check\"",
+        Reason: "response from dev: \"fixed with idempotency check\"",
         Score: 0.91,
         CreatedAt: new DateTimeOffset(2026, 3, 10, 0, 0, 0, TimeSpan.Zero));
 
     [Theory]
-    [InlineData(DecisionOutcome.Accepted, "Finding aceptado — se corrigió la implementación")]
-    [InlineData(DecisionOutcome.Rejected, "Finding rechazado")]
-    [InlineData(DecisionOutcome.PartiallyAccepted, "Finding parcialmente aceptado")]
-    [InlineData(DecisionOutcome.Unknown, "Desenlace desconocido")]
+    [InlineData(DecisionOutcome.Accepted, "Finding accepted — implementation was fixed")]
+    [InlineData(DecisionOutcome.Rejected, "Finding rejected")]
+    [InlineData(DecisionOutcome.PartiallyAccepted, "Finding partially accepted")]
+    [InlineData(DecisionOutcome.Unknown, "Unknown outcome")]
     public void Outcome_labels_match_the_spec_exactly(DecisionOutcome outcome, string expected)
     {
         Assert.Equal(expected, SearchRenderer.DescribeOutcome(outcome, reason: null));
@@ -33,25 +33,25 @@ public sealed class SearchRendererTests
     public void Outcome_description_appends_reason_after_label()
     {
         var text = SearchRenderer.DescribeOutcome(
-            DecisionOutcome.Accepted, "respuesta de dev: \"fixed\"");
+            DecisionOutcome.Accepted, "response from dev: \"fixed\"");
 
-        Assert.Equal("Finding aceptado — se corrigió la implementación. respuesta de dev: \"fixed\"", text);
+        Assert.Equal("Finding accepted — implementation was fixed. response from dev: \"fixed\"", text);
     }
 
     [Fact]
     public void Zero_results_message_matches_the_spec_exactly()
     {
-        Assert.Equal("0 discusiones relevantes encontradas", SearchRenderer.RenderConsole([]));
+        Assert.Equal("0 relevant discussions found", SearchRenderer.RenderConsole([]));
     }
 
     [Fact]
     public void Console_shows_resolution_for_unknown_outcome_with_reason()
     {
-        var hit = Hit with { Outcome = DecisionOutcome.Unknown, Reason = "señales contradictorias" };
+        var hit = Hit with { Outcome = DecisionOutcome.Unknown, Reason = "contradictory signals" };
 
         var output = SearchRenderer.RenderConsole([hit]);
 
-        Assert.Contains("Resolución: Desenlace desconocido. señales contradictorias", output);
+        Assert.Contains("Resolution: Unknown outcome. contradictory signals", output);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class SearchRendererTests
 
         var output = SearchRenderer.RenderConsole([hit]);
 
-        Assert.DoesNotContain("Resolución:", output);
+        Assert.DoesNotContain("Resolution:", output);
     }
 
     [Fact]
@@ -81,12 +81,12 @@ public sealed class SearchRendererTests
     [Fact]
     public void Console_flattens_and_truncates_finding_body_at_240_chars_with_ellipsis()
     {
-        var finding = string.Concat(Enumerable.Repeat("palabra ", 60));
-        var hit = Hit with { Finding = "primera línea\n" + finding };
+        var finding = string.Concat(Enumerable.Repeat("word ", 60));
+        var hit = Hit with { Finding = "first line\n" + finding };
         const int maxLength = 240;
 
         var output = SearchRenderer.RenderConsole([hit]);
-        var content = output.Split('\n').First(line => line.TrimStart().StartsWith("primera")).TrimEnd('\r');
+        var content = output.Split('\n').First(line => line.TrimStart().StartsWith("first")).TrimEnd('\r');
 
         Assert.Equal(maxLength, content.TrimStart().Length);
         Assert.EndsWith("…", content);
@@ -165,11 +165,11 @@ public sealed class SearchRendererTests
         var output = SearchRenderer.RenderConsole([Hit]);
 
         Assert.Contains("HIGH", output);
-        Assert.Contains("Similitud: 0.91", output);
+        Assert.Contains("Similarity: 0.91", output);
         Assert.Contains("PR #1943 (Shirka-Corporation/player-manager)", output);
         Assert.Contains("src/AdJoePayoutHandler.cs:120", output);
         Assert.Contains("#discussion_r991", output);
-        Assert.Contains("Finding aceptado", output);
+        Assert.Contains("Finding accepted", output);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class SearchRendererTests
     {
         var output = SearchRenderer.RenderConsole([]);
 
-        Assert.StartsWith("0 discusiones", output);
+        Assert.StartsWith("0 relevant discussions", output);
     }
 
     [Fact]
@@ -195,9 +195,9 @@ public sealed class SearchRendererTests
     [Fact]
     public void Outcome_description_includes_reason()
     {
-        var text = SearchRenderer.DescribeOutcome(DecisionOutcome.Rejected, "invariante ya cubierta por la BD");
+        var text = SearchRenderer.DescribeOutcome(DecisionOutcome.Rejected, "invariant already enforced by the database");
 
-        Assert.Contains("rechazado", text);
-        Assert.Contains("invariante ya cubierta por la BD", text);
+        Assert.Contains("rejected", text);
+        Assert.Contains("invariant already enforced by the database", text);
     }
 }

@@ -1,5 +1,5 @@
--- ReviewMemory: memoria institucional de code review.
--- Etapa 1: PRs, archivos, hunks, discusiones de review y decisiones.
+-- ReviewMemory: institutional memory for code review.
+-- Stage 1: PRs, files, hunks, review discussions and decisions.
 
 CREATE TABLE IF NOT EXISTS pull_requests (
     repo       text        NOT NULL,

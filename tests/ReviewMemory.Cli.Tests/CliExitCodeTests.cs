@@ -1,8 +1,8 @@
 namespace ReviewMemory.Cli.Tests;
 
 /// <summary>
-/// Contrato de exit codes y salida según docs/specs/04-cli.md (§Exit codes,
-/// §Criterios de aceptación 1-2) y docs/specs/03-recuperacion.md (§Contrato para agentes).
+/// Exit code and output contract per docs/specs/04-cli.md (§Exit codes,
+/// §Acceptance criteria 1-2) and docs/specs/03-ranking.md (§Agent contract).
 /// </summary>
 public sealed class CliExitCodeTests
 {
@@ -32,10 +32,10 @@ public sealed class CliExitCodeTests
     }
 
     [Theory]
-    [InlineData(new[] { "index", "owner" }, "error: el repositorio debe tener el formato owner/name")]
-    [InlineData(new[] { "search", "" }, "error: la búsqueda requiere texto o --files")]
-    [InlineData(new[] { "search", "x", "--format", "xml" }, "error: --format desconocido 'xml' (console|json)")]
-    [InlineData(new[] { "context", "badrepo", "--pr", "1" }, "error: el repositorio debe tener el formato owner/name")]
+    [InlineData(new[] { "index", "owner" }, "error: repository must be in owner/name format")]
+    [InlineData(new[] { "search", "" }, "error: search requires text or --files")]
+    [InlineData(new[] { "search", "x", "--format", "xml" }, "error: unknown --format 'xml' (console|json)")]
+    [InlineData(new[] { "context", "badrepo", "--pr", "1" }, "error: repository must be in owner/name format")]
     public void Invalid_usage_exits_two_with_literal_message_on_stderr(string[] args, string expected)
     {
         var result = CliProcess.Run(args);
@@ -70,7 +70,7 @@ public sealed class CliExitCodeTests
         var result = CliProcess.Run("context", repo, "--pr", "999999", "--connection-string", connectionString);
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Equal($"error: el PR {repo}#999999 no está indexado; ejecuta 'reviewmemory index' primero{Environment.NewLine}", result.StdErr);
+        Assert.Equal($"error: PR {repo}#999999 is not indexed; run 'reviewmemory index' first{Environment.NewLine}", result.StdErr);
         Assert.Equal(string.Empty, result.StdOut);
     }
 }

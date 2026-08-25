@@ -6,7 +6,7 @@ namespace ReviewMemory.GitHub.Tests;
 public sealed class GitHubPullRequestSourceTests
 {
     [Fact]
-    public void Sobrescribe_resolved_cruzando_por_el_id_del_comentario_raiz()
+    public void Overwrites_resolved_cross_referencing_by_root_comment_id()
     {
         var threads = new List<ReviewThreadData> { Thread(111), Thread(222) };
         var resolvedByRootCommentId = new Dictionary<long, bool> { [111] = true };
@@ -19,7 +19,7 @@ public sealed class GitHubPullRequestSourceTests
     }
 
     [Fact]
-    public void Sin_mapa_deja_los_hilos_intactos()
+    public void Without_map_leaves_threads_intact()
     {
         var threads = new List<ReviewThreadData> { Thread(111, resolved: true) };
 
@@ -29,7 +29,7 @@ public sealed class GitHubPullRequestSourceTests
     }
 
     [Fact]
-    public async Task Fallo_de_GraphQL_degrada_a_vacio_y_avisa_una_sola_vez()
+    public async Task GraphQL_failure_degrades_to_empty_and_warns_once()
     {
         var reasons = new List<string>();
         var source = NewSource(
@@ -46,7 +46,7 @@ public sealed class GitHubPullRequestSourceTests
     }
 
     [Fact]
-    public async Task Sin_token_degrada_con_motivo_explicito()
+    public async Task Missing_token_degrades_with_explicit_reason()
     {
         var reasons = new List<string>();
         var source = NewSource(null, reasons.Add, graphQl: null);
@@ -74,6 +74,6 @@ public sealed class GitHubPullRequestSourceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) =>
-            throw new HttpRequestException("conexión rechazada");
+            throw new HttpRequestException("connection refused");
     }
 }

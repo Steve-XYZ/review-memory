@@ -1,82 +1,82 @@
 # ReviewMemory
 
-Memoria institucional para code review. No es otro "AI reviewer": es la memoria que cualquier reviewer —humano, Codex, Claude, Copilot— consulta antes de revisar un PR.
+Institutional memory for code review. Not another "AI reviewer": it is the memory any reviewer —human, Codex, Claude, Copilot— consults before reviewing a PR.
 
 ```
 reviewmemory context Shirka-Corporation/player-manager --pr 2268
 ```
 
 ```
-3 discusión(es) históricamente relevante(s)
+3 historically relevant discussion(s)
 
 1. HIGH — Provider callbacks could be processed twice.
-   Similitud: 0.91
+   Similarity: 0.91
    PR #1943 (Shirka-Corporation/player-manager) · 2026-03-10
    File: src/AdJoePayoutHandler.cs:120
    ...
 ```
 
-El agente que revisa tu PR sabe qué preocupaciones son históricamente relevantes y cuáles ya fueron descartadas por el equipo. Eso vale más que meter veinte reglas más en `AGENTS.md`.
+The agent reviewing your PR knows which concerns are historically relevant and which were already discarded by the team. That is worth more than stuffing twenty more rules into `AGENTS.md`.
 
-**La memoria es el producto; el LLM reviewer no lo es.**
+**The memory is the product; the LLM reviewer is not.**
 
 ## Stack
 
-.NET 10 · System.CommandLine · Octokit · Npgsql (PostgreSQL full-text search) · ModelContextProtocol (servidor MCP stdio) · xUnit
+.NET 10 · System.CommandLine · Octokit · Npgsql (PostgreSQL full-text search) · ModelContextProtocol (stdio MCP server) · xUnit
 
-## Comandos
+## Commands
 
 ```bash
-# indexar los últimos N PRs de un repositorio
+# index the last N PRs of a repository
 reviewmemory index Shirka-Corporation/player-manager --last 200
 
-# buscar discusiones históricas por texto y/o archivos tocados
+# search historical discussions by text and/or touched files
 reviewmemory search "duplicate lotto transaction" --repo Shirka-Corporation/player-manager
 reviewmemory search "retry idempotency" --files src/LottoPendingTransactionProcessor.cs
 
-# contexto histórico relevante para un PR concreto (excluye sus propias discusiones)
+# relevant historical context for a specific PR (excludes its own discussions)
 reviewmemory context Shirka-Corporation/player-manager --pr 2268 --limit 5
 ```
 
-`--format json` devuelve el mismo resultado serializado para consumo de agentes.
+`--format json` returns the same result serialized for agent consumption.
 
-## Servidor MCP
+## MCP server
 
-La misma memoria, expuesta como tools MCP de solo lectura sobre stdio: los agentes (Claude Code, OpenCode, Codex, Copilot, Cursor…) consultan el historial sin invocar el CLI ni saber nada de Postgres.
+The same memory, exposed as read-only MCP tools over stdio: agents (Claude Code, OpenCode, Codex, Copilot, Cursor…) consult the history without invoking the CLI or knowing anything about Postgres.
 
-| Tool | Parámetros | Equivale a |
+| Tool | Parameters | Equivalent to |
 |---|---|---|
-| `search` | `query`, `repo` (opcional), `files` (opcional), `limit` (opcional) | `reviewmemory search --format json` |
-| `context` | `repo`, `pr`, `limit` (opcional) | `reviewmemory context --format json` |
+| `search` | `query`, `repo` (optional), `files` (optional), `limit` (optional) | `reviewmemory search --format json` |
+| `context` | `repo`, `pr`, `limit` (optional) | `reviewmemory context --format json` |
 
-Cada tool devuelve exactamente el mismo JSON que el comando homónimo del CLI con `--format json`. No hay tools de escritura: la memoria se alimenta con `index`, nunca desde el agente consumidor. Si la BD no está accesible, la respuesta es un error estructurado (`isError: true` con código y mensaje) y el proceso sigue vivo.
+Each tool returns exactly the same JSON as the CLI's homonymous command with `--format json`. There are no write tools: the memory is fed with `index`, never from the consuming agent. If the database is unreachable, the response is a structured error (`isError: true` with code and message) and the process stays alive.
 
-### Ejecutar
+### Run
 
 ```bash
-docker compose up -d db                       # la BD debe estar levantada
-dotnet run --project src/ReviewMemory.Mcp     # servidor MCP sobre stdio
+docker compose up -d db                       # the DB must be running
+dotnet run --project src/ReviewMemory.Mcp     # MCP server over stdio
 ```
 
-Como herramienta .NET autocontenida: publica una vez con el RID de tu plataforma (`linux-x64`, `osx-arm64`, `win-x64`…) y apunta cada cliente al binario resultante; no requiere .NET instalado en la máquina que ejecuta el server.
+As a self-contained .NET tool: publish once with your platform's RID (`linux-x64`, `osx-arm64`, `win-x64`…) and point each client to the resulting binary; no .NET installation required on the machine running the server.
 
 ```bash
 dotnet publish src/ReviewMemory.Mcp -c Release -r linux-x64 --self-contained true -o publish/mcp
-./publish/mcp/ReviewMemory.Mcp                # binario autocontenido del server
+./publish/mcp/ReviewMemory.Mcp                # self-contained server binary
 ```
 
-La conexión se resuelve igual que en el CLI: variable `REVIEWMEMORY_CONNECTIONSTRING` o, por defecto, la BD local de docker-compose (`localhost:5433`).
+The connection resolves the same way as in the CLI: the `REVIEWMEMORY_CONNECTIONSTRING` variable or, by default, the docker-compose local database (`localhost:5433`).
 
-### Registro en Claude Code
+### Register in Claude Code
 
-En el `.mcp.json` del proyecto (o en la configuración global):
+In the project's `.mcp.json` (or global configuration):
 
 ```json
 {
   "mcpServers": {
     "reviewmemory": {
       "type": "stdio",
-      "command": "/ruta/absoluta/a/review-memory/publish/mcp/ReviewMemory.Mcp",
+      "command": "/absolute/path/to/review-memory/publish/mcp/ReviewMemory.Mcp",
       "env": {
         "REVIEWMEMORY_CONNECTIONSTRING": "Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory"
       }
@@ -85,16 +85,16 @@ En el `.mcp.json` del proyecto (o en la configuración global):
 }
 ```
 
-### Registro en OpenCode
+### Register in OpenCode
 
-En `opencode.json`:
+In `opencode.json`:
 
 ```json
 {
   "mcp": {
     "reviewmemory": {
       "type": "local",
-      "command": ["/ruta/absoluta/a/review-memory/publish/mcp/ReviewMemory.Mcp"],
+      "command": ["/absolute/path/to/review-memory/publish/mcp/ReviewMemory.Mcp"],
       "environment": {
         "REVIEWMEMORY_CONNECTIONSTRING": "Host=localhost;Port=5433;Database=reviewmemory;Username=reviewmemory;Password=reviewmemory"
       }
@@ -103,65 +103,65 @@ En `opencode.json`:
 }
 ```
 
-## Skill de review
+## Review skill
 
-El consumo real de la memoria en el flujo de trabajo ([06-roadmap](docs/specs/06-roadmap.md) §4): una skill que ordena el review como *ticket → inspección del diff → consulta de memoria → validación de cada hallazgo contra el historial*. Un finding que contradice una decisión `rejected` se omite o se marca como «ya discutido y descartado» citando el hilo; uno respaldado por una discusión `accepted` gana peso y cita su precedente; nada se descarta en silencio. La skill está versionada en [`skills/review-memory/SKILL.md`](skills/review-memory/SKILL.md).
+The real consumption of the memory in the workflow ([06-roadmap](docs/specs/06-roadmap.md) §4): a skill that orders the review as *ticket → diff inspection → memory query → validation of each finding against the history*. A finding contradicting a `rejected` decision is omitted or flagged as "already discussed and discarded" citing the thread; one backed by an `accepted` discussion gains weight and cites its precedent; nothing is silently discarded. The skill is versioned at [`skills/review-memory/SKILL.md`](skills/review-memory/SKILL.md).
 
-Requisito previo: el [servidor MCP](#servidor-mcp) registrado en el cliente que ejecute la skill.
+Prerequisite: the [MCP server](#mcp-server) registered in the client that runs the skill.
 
-### Instalación por proyecto
+### Per-project installation
 
-**Claude Code** — copia o enlaza la skill dentro del proyecto revisado:
+**Claude Code** — copy or link the skill into the reviewed project:
 
 ```bash
 mkdir -p .claude/skills
-cp -r /ruta/a/review-memory/skills/review-memory .claude/skills/
+cp -r /path/to/review-memory/skills/review-memory .claude/skills/
 ```
 
-**OpenCode** — misma estructura (`<nombre>/SKILL.md` con frontmatter `name` + `description`): colócala en `.opencode/skills/review-memory/` o reutiliza el `.claude/skills/` anterior, que OpenCode también descubre a nivel de proyecto. Verificada end-to-end solo con Claude Code; el descubrimiento de ambas rutas en OpenCode consta en su documentación de Agent Skills.
+**OpenCode** — same structure (`<name>/SKILL.md` with `name` + `description` frontmatter): place it in `.opencode/skills/review-memory/` or reuse the previous `.claude/skills/`, which OpenCode also discovers at project level. Verified end-to-end only with Claude Code; discovery of both paths in OpenCode is documented in its Agent Skills docs.
 
-## Configuración
+## Configuration
 
-| Variable | Uso |
+| Variable | Purpose |
 |---|---|
-| `GITHUB_TOKEN` | token de GitHub para `index` (sin token: 60 req/h) |
-| `REVIEWMEMORY_CONNECTIONSTRING` | conexión Postgres; por defecto la BD local de docker-compose |
+| `GITHUB_TOKEN` | GitHub token for `index` (without token: 60 req/h) |
+| `REVIEWMEMORY_CONNECTIONSTRING` | Postgres connection; defaults to the docker-compose local database |
 
 ```bash
-docker compose up -d          # Postgres 17 en localhost:5433 (evita el 5432 típico de otras BD locales)
+docker compose up -d          # Postgres 17 at localhost:5433 (avoids the typical 5432 used by other local DBs)
 dotnet run --project src/ReviewMemory.Cli -- index owner/name --last 50
 ```
 
-| Exit code | Significado |
+| Exit code | Meaning |
 |---|---|
-| 0 | éxito |
-| 1 | error en tiempo de ejecución (GitHub, red, base de datos) |
-| 2 | uso inválido o entidad no encontrada |
+| 0 | success |
+| 1 | runtime error (GitHub, network, database) |
+| 2 | invalid usage or entity not found |
 
-## Qué hace el ranking (etapa 1)
+## What the ranking does (stage 1)
 
-Sin IA. Tres señales combinadas sobre las discusiones de review indexadas:
+No AI. Three combined signals over indexed review discussions:
 
-- **Full-text search**: `tsvector` generado sobre el comentario del reviewer + la ruta del archivo (`websearch_to_tsquery`, índice GIN).
-- **Solapamiento de archivos**: proporción de rutas consultadas que el PR candidato tocó.
-- **Recencia**: decaimiento exponencial con constante temporal de 120 días (mitad del factor ≈83 días; detalle en `docs/specs/03-recuperacion.md`).
+- **Full-text search**: `tsvector` generated over the reviewer's comment + file path (`websearch_to_tsquery`, GIN index).
+- **File overlap**: proportion of queried paths the candidate PR touched.
+- **Recency**: exponential decay with a 120-day time constant (factor half-life ≈83 days; detail in `docs/specs/03-ranking.md`).
 
-Cada hilo lleva una **decisión inferida** (`accepted` / `rejected` / `partially_accepted` / `unknown`) a partir de señales léxicas deterministas en las respuestas; señales contradictorias quedan como `unknown` en lugar de adivinar.
+Every thread carries an **inferred decision** (`accepted` / `rejected` / `partially_accepted` / `unknown`) derived from deterministic lexical signals in the replies; contradictory signals stay `unknown` instead of guessing.
 
-## Estado: bases de la etapa 1
+## Status: stage 1 foundations
 
-- [x] Solución `ReviewMemory.slnx`: Cli · Core · GitHub · Storage (+ tests)
-- [x] Esquema PostgreSQL con migraciones embebidas (`schema_migrations`)
-- [x] Ingesta REST de GitHub: PRs, archivos, hunks, comentarios agrupados en hilos
-- [x] Búsqueda FTS + solapamiento + recencia; comando `context` que excluye el propio PR
-- [x] CI (build + tests contra Postgres real)
-- [ ] Specs en `docs/specs/`
-- [x] Estado "resolved" de hilos vía GraphQL (degrada sin romper la indexación)
-- [x] Re-indexado incremental por hash de contenido
-- [x] MCP server stdio con tools `search` y `context`, paridad JSON con el CLI
-- [x] Skill de review guiada por la memoria (`skills/review-memory`)
-- [ ] embeddings/pgvector · aprendizaje post-review
+- [x] Solution `ReviewMemory.slnx`: Cli · Core · GitHub · Storage (+ tests)
+- [x] PostgreSQL schema with embedded migrations (`schema_migrations`)
+- [x] GitHub REST ingestion: PRs, files, hunks, comments grouped into threads
+- [x] FTS + overlap + recency search; `context` command excluding the PR itself
+- [x] CI (build + tests against real Postgres)
+- [ ] Specs in `docs/specs/`
+- [x] Thread "resolved" state via GraphQL (degrades without breaking indexing)
+- [x] Incremental re-indexing by content hash
+- [x] stdio MCP server with `search` and `context` tools, JSON parity with the CLI
+- [x] Memory-guided review skill (`skills/review-memory`)
+- [ ] embeddings/pgvector · post-review learning
 
-## Documentación
+## Documentation
 
-Las specs de la siguiente etapa se escriben en [docs/specs](docs/specs/README.md).
+The specs for the next stage are written in [docs/specs](docs/specs/README.md).

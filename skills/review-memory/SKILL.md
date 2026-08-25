@@ -3,67 +3,60 @@ name: review-memory
 description: Guided GitHub PR code review that consults the team's historical review memory. Use when asked to review a pull request (or a diff) while the ReviewMemory MCP server with its search and context tools is available; it orders the flow, calibrates every finding against prior team decisions, and reports suppressed findings instead of silently repeating them.
 ---
 
-# Review guiada por ReviewMemory
+# Review guided by ReviewMemory
 
-Memoria institucional de code review: ReviewMemory recupera discusiones históricas del
-equipo con su decisión inferida (`accepted`, `rejected`, `partially_accepted`,
-`unknown`). Esta skill ordena el flujo de review para consumirla. La memoria informa;
-juzgar el diff sigue siendo tu trabajo.
+Institutional code review memory: ReviewMemory retrieves the team's historical discussions with their inferred decision (`accepted`, `rejected`, `partially_accepted`,
+`unknown`). This skill orders the review flow to consume it. The memory informs;
+judging the diff remains your job.
 
-## Flujo obligatorio
+## Mandatory flow
 
-El orden es deliberado y anti-anclaje: primero piensas, después consultas.
+The order is deliberate and anti-anchoring: first you think, then you consult.
 
-1. **Ticket**: entiende qué cambia el PR y por qué.
-2. **Inspección del diff**: lee el diff y forma tus hallazgos candidatos SIN consultar
-   la memoria todavía. Anótalos todos, aunque sospeches que alguno ya fue discutido.
-3. **Consulta de memoria** (antes de cerrar el informe):
-   - Obligatorio: `context` del PR en revisión — `context(repo: "owner/name", pr: N)`.
-   - Opcional pero recomendado si el diff toca rutas con historia o términos clave:
-     `search(query: "<términos del hallazgo>", files: ["ruta/tocada.go"])`.
-4. **Validación**: contrasta cada hallazgo candidato contra el código actual Y contra
-   el historial devuelto (reglas abajo).
-5. **Informe**: findings calibrados + sección de transparencia (abajo).
+1. **Ticket**: understand what the PR changes and why.
+2. **Diff inspection**: read the diff and form your candidate findings WITHOUT consulting
+   the memory yet. Write them all down, even if you suspect some were already discussed.
+3. **Memory query** (before closing the report):
+   - Mandatory: `context` of the PR under review — `context(repo: "owner/name", pr: N)`.
+   - Optional but recommended if the diff touches paths with history or key terms:
+     `search(query: "<finding terms>", files: ["touched/path.go"])`.
+4. **Validation**: contrast each candidate finding against the current code AND against
+   the returned history (rules below).
+5. **Report**: calibrated findings + transparency section (below).
 
-## Calibración de cada hallazgo
+## Calibration of each finding
 
-- **Contradice una decisión `rejected`** → omítelo del cuerpo del informe o márcalo
-  explícitamente como «ya discutido y descartado», citando `url` y `threadId`.
-- **Está respaldado por una discusión `accepted`** → consérvalo y cítalo como
-  precedente con su `url`.
-- **Coincide solo en parte con una discusión `partially_accepted`** → precedente
-  parcial: gana algo de peso, pero exige verificar que el código actual siga aplicando
-  la parte que el equipo aceptó antes de apoyarte en ella.
-- **`unknown` o sin señal** → peso normal, como en cualquier review.
-- La coincidencia se juzga por archivo tocado y por sustancia del hallazgo, no por
-  similitud textual superficial. Un score bajo no invalida un precedente pertinente;
-  un score alto no lo confirma si el código cambió.
+- **Contradicts a `rejected` decision** → omit it from the report body or flag it
+  explicitly as "already discussed and discarded", citing `url` and `threadId`.
+- **Backed by an `accepted` discussion** → keep it and cite it as
+  precedent with its `url`.
+- **Partially matches a `partially_accepted` discussion** → partial precedent: gains some weight, but requires verifying that the current code still applies
+  the part the team accepted before leaning on it.
+- **`unknown` or no signal** → normal weight, as in any review.
+- Match is judged by touched file and by substance of the finding, not by
+  superficial textual similarity. A low score does not invalidate a pertinent precedent;
+  a high score does not confirm it if the code changed.
 
-Nota: el contrato JSON actual no expone la procedencia de la decisión (`inferred` vs
-`manual`); si una versión futura la añade, úsala para priorizar precedentes manuales.
+Note: the current JSON contract does not expose decision provenance (`inferred` vs
+`manual`); if a future version adds it, use it to prioritize manual precedents.
 
-## Transparencia
+## Transparency
 
-Nada se descarta en silencio. Todo hallazgo omitido por historia aparece en una
-sección final «Hallazgos descartados por decisiones previas» con: qué se omitió, qué
-hilo lo descartó (`url` + `threadId`) y cuál fue la decisión. Si la memoria no aportó
-nada relevante dilo también: «la memoria no devolvió precedentes aplicables».
+Nothing is silently discarded. Every finding omitted due to history appears in a final section "Findings discarded by prior decisions" with: what was omitted, which thread discarded it (`url` + `threadId`) and what the decision was. If the memory contributed nothing relevant say so too: "the memory returned no applicable precedents".
 
-## Degradación — nunca bloquees el review
+## Degradation — never block the review
 
-- `context` responde error `pr_not_indexed` → intenta una sola vez
-  `reviewmemory index owner/name --last N` **solo si el binario `reviewmemory` está
-  disponible en PATH**; si no lo está, pídele al usuario que indexe el PR. En ambos
-  casos reintenta `context` una vez.
-- Si el reintento también falla o nadie puede indexar → continúa con lo que `search`
-  devuelva más un review normal, declarándolo al inicio del informe:
-  «review sin contexto del propio PR: <motivo>».
-- BD o servidor MCP no disponibles → continúa como review normal y decláralo al inicio
-  del informe: «review sin memoria: <motivo>».
-- Un fallo de la memoria nunca aborta ni retrasa el review más ese reintento único.
+- `context` responds with error `pr_not_indexed` → try once
+  `reviewmemory index owner/name --last N` **only if the `reviewmemory` binary is
+  available in PATH**; if it is not, ask the user to index the PR. In both cases retry `context` once.
+- If the retry also fails or nobody can index → continue with whatever `search`
+  returns plus a normal review, declaring it at the start of the report:
+  "review without context of the PR itself: <reason>".
+- DB or MCP server unavailable → continue as a normal review and declare it at the start
+  of the report: "review without memory: <reason>".
+- A memory failure never aborts or delays the review beyond that single retry.
 
-## Límite de responsabilidad
+## Limits of responsibility
 
-Una decisión histórica no es prueba de que el código actual sea correcto: valida el
-precedente contra el estado actual del archivo. Si el código cambió desde el hilo,
-el precedente pierde fuerza y el hallazgo vuelve a peso normal.
+A historical decision is not proof that the current code is correct: validate the precedent against the current state of the file. If the code changed since the thread,
+the precedent loses force and the finding returns to normal weight.

@@ -13,8 +13,8 @@ public static class DbMigrations
         """;
 
     /// <summary>
-    /// Aplica en orden todas las migraciones embebidas que falten.
-    /// Devuelve los nombres de las migraciones aplicadas en esta llamada.
+    /// Applies all missing embedded migrations in order.
+    /// Returns the names of the migrations applied by this call.
     /// </summary>
     public static async Task<IReadOnlyList<string>> ApplyAsync(
         NpgsqlDataSource dataSource, CancellationToken cancellationToken = default)

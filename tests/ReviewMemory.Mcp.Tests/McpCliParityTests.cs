@@ -9,10 +9,10 @@ using ReviewMemory.Storage;
 namespace ReviewMemory.Mcp.Tests;
 
 /// <summary>
-/// Paridad de contrato docs/specs/03-recuperacion.md: la salida JSON de los tools
-/// MCP debe ser idéntica a la de los comandos homónimos del CLI con --format json.
-/// El único componente no determinista es la recencia (depende de now() en cada
-/// consulta), así que los score se comparan con tolerancia y el resto byte a byte.
+/// Contract parity with docs/specs/03-ranking.md: the JSON output of the MCP tools
+/// must be identical to the CLI's homonymous commands with --format json.
+/// The only non-deterministic component is recency (depends on now() on each
+/// query), so scores are compared with tolerance and the rest byte by byte.
 /// </summary>
 public sealed class McpCliParityTests
 {
@@ -20,7 +20,7 @@ public sealed class McpCliParityTests
         Environment.GetEnvironmentVariable("REVIEWMEMORY_TEST_CONNECTIONSTRING");
 
     [Fact]
-    public async Task Search_json_del_tool_iguala_al_cli()
+    public async Task Tool_search_json_matches_cli()
     {
         if (ConnectionString is null)
         {
@@ -39,7 +39,7 @@ public sealed class McpCliParityTests
     }
 
     [Fact]
-    public async Task Search_por_archivos_json_del_tool_iguala_al_cli()
+    public async Task Search_by_files_tool_json_matches_cli()
     {
         if (ConnectionString is null)
         {
@@ -59,7 +59,7 @@ public sealed class McpCliParityTests
     }
 
     [Fact]
-    public async Task Context_json_del_tool_iguala_al_cli()
+    public async Task Tool_context_json_matches_cli()
     {
         if (ConnectionString is null)
         {
@@ -104,14 +104,14 @@ public sealed class McpCliParityTests
         {
             Assert.True(
                 Math.Abs(cliHits[i].GetProperty("score").GetDouble() - toolHits[i].GetProperty("score").GetDouble()) < 1e-5,
-                $"score del hit {i} difiere más allá del ruido de recencia");
+                $"hit {i} score differs beyond recency noise");
         }
 
         return toolHits;
     }
 
     private static string MaskScores(string json) =>
-        Regex.Replace(json, @"""score"":\s*-?\d+(\.\d+)?([eE][+-]?\d+)?", @"""score"": <ruido-recencia>");
+        Regex.Replace(json, @"""score"":\s*-?\d+(\.\d+)?([eE][+-]?\d+)?", @"""score"": <recency-noise>");
 
     private static async Task<string> SeedIndexedPullRequestAsync()
     {

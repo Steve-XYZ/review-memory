@@ -1,9 +1,9 @@
 namespace ReviewMemory.Core;
 
 /// <summary>
-/// Búsqueda sobre la memoria indexada. Con texto se aplica full-text search;
-/// con rutas de archivo se filtran PRs que tocaron esos archivos.
-/// Al menos una de las dos señales debe estar presente.
+/// Search over the indexed memory. Text applies full-text search;
+/// file paths filter PRs that touched those files.
+/// At least one of the two signals must be present.
 /// </summary>
 public sealed record SearchQuery(
     string Text,

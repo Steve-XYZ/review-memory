@@ -1,149 +1,139 @@
-# Roadmap posterior a la etapa 1
+# Roadmap after stage 1
 
-La etapa 1 ([01-vision](01-vision.md)) sentó las bases: ingesta REST de PRs, búsqueda
-FTS + solapamiento + recencia, decisiones inferidas y CLI ([04-cli](04-cli.md)).
-Este roadmap ordena lo que viene. El orden es deliberado: primero corregir la calidad
-y durabilidad de los datos que ya se indexan, después llevarlos al lugar donde los
-reviewers trabajan (agentes vía MCP), y al final las mejoras condicionadas a evidencia.
+Stage 1 ([01-vision](01-vision.md)) laid the foundations: REST PR ingestion, FTS +
+overlap + recency search, inferred decisions, and the CLI ([04-cli](04-cli.md)).
+This roadmap orders what comes next. The order is deliberate: first fix the quality
+and durability of the data already indexed, then take it to where reviewers work
+(agents via MCP), and finally the improvements conditional on evidence.
 
-Cada ítem marca si es **compromiso** (trabajo acordado de esta etapa) o **propuesta**
-(se ejecuta cuando su criterio de entrada se cumple). El orden de prioridad:
+Each item marks whether it is a **commitment** (agreed work for this stage) or a
+**proposal** (executed when its entry criterion is met). Priority order:
 
-1. Estado `resolved` vía GraphQL — corrección barata de un dato falso persistido hoy.
-2. Re-indexado incremental — evita destruir estado propio en cada corrida de `index`.
-3. MCP server — distribución: sin esto, la memoria solo llega a quien tiene el CLI.
-4. Integración con skills de review — consumo real del ítem 3 en el flujo de trabajo.
-5. Embeddings + pgvector — solo si la medición demuestra que FTS puro se queda corto.
-6. Aprendizaje post-review — depende de 1, 2 (datos correctos) y 4 (consumo real).
+1. `resolved` state via GraphQL — cheap correction of false data persisted today.
+2. Incremental re-indexing — avoids destroying owned state on every `index` run.
+3. MCP server — distribution: without it, the memory only reaches whoever has the CLI.
+4. Integration with review skills — real consumption of item 3 in the workflow.
+5. Embeddings + pgvector — only if measurement proves plain FTS falls short.
+6. Post-review learning — depends on 1, 2 (correct data) and 4 (real consumption).
 
-## 1. Estado resolved vía GraphQL (compromiso)
+## 1. Resolved state via GraphQL (commitment)
 
-**Problema.** La API REST de GitHub no expone el estado resuelto de los hilos de
-review; `GitHubPullRequestSource` reconstruye los hilos agrupando comentarios por su
-cadena de `in_reply_to` y todos llegan con `Resolved = false`
-(`src/ReviewMemory.GitHub/GitHubPullRequestSource.cs`). Consecuencia: la columna
-`resolved` guarda ruido y [05-decisiones](05-decisiones.md) infere sobre una señal
-siempre falsa — un hilo discutido y descartado por el equipo se ve igual que uno
-abierto sin respuesta.
+**Problem.** GitHub's REST API does not expose the resolved state of review threads;
+`GitHubPullRequestSource` reconstructs threads by grouping comments along their
+`in_reply_to` chain and all arrive with `Resolved = false`
+(`src/ReviewMemory.GitHub/GitHubPullRequestSource.cs`). Consequence: the `resolved`
+column stores noise and [05-decisions](05-decisions.md) infers over an always-false
+signal — a thread discussed and discarded by the team looks the same as an open
+unanswered one.
 
-**Propuesta.** Consulta GraphQL complementaria tras cargar el PR por REST:
-`pullRequest.reviewThreads { id isResolved isOutdated }`, mapeo `thread id → isResolved`
-y sobrescritura de `Resolved` antes de persistir. REST sigue siendo la fuente de
-comentarios y paginación; GraphQL aporta solo el flag. Si la consulta falla, degradar
-al comportamiento actual con aviso en stderr y exit 0.
+**Proposal.** A complementary GraphQL query after loading the PR via REST:
+`pullRequest.reviewThreads { id isResolved isOutdated }`, mapping `thread id → isResolved`,
+and overwriting `Resolved` before persisting. REST remains the source of comments and
+pagination; GraphQL contributes only the flag. If the query fails, degrade to current
+behavior with a stderr warning and exit 0.
 
-- Entrada: ninguna; es una corrección de la etapa 1.
-- Salida (definition of done): tras `index`, un PR con hilos resueltos conocidos
-  persiste `resolved = true` para esos hilos (test contra fixture GraphQL); fallo de
-  GraphQL degrada sin romper la indexación.
+- Entry: none; it is a stage 1 correction.
+- Output (definition of done): after `index`, a PR with known resolved threads persists
+  `resolved = true` for those threads (test against a GraphQL fixture); GraphQL failure
+  degrades without breaking indexing.
 
-## 2. Re-indexado incremental (compromiso)
+## 2. Incremental re-indexing (commitment)
 
-**Problema.** `IndexRepository.UpsertAsync` borra y recrea todos los hilos del PR en
-cada pasada (`DeleteThreadsAsync`, `src/ReviewMemory.Storage/IndexRepository.cs`).
-Todo lo que viva ligado a esas filas —una decisión corregida manualmente
-(`confidence = manual`) o cualquier dato futuro aprendido sobre el hilo— se pierde
-cada vez que alguien relanza `index`. Además reescribe filas idénticas: costo
-proporcional a todo el histórico en cada corrida.
+**Problem.** `IndexRepository.UpsertAsync` deletes and recreates all of the PR's threads on
+every pass (`DeleteThreadsAsync`, `src/ReviewMemory.Storage/IndexRepository.cs`).
+Everything living attached to those rows —a manually corrected decision
+(`confidence = manual`) or any future data learned about the thread— is lost every time
+someone reruns `index`. It also rewrites identical rows: cost proportional to the whole
+history on every run.
 
-**Propuesta.** Conciliar hilos entrantes contra existentes por su id estable de
-GitHub: insertar nuevos, actualizar los modificados (hash de contenido: finding,
-respuestas, path, línea), conservar intactos los que no cambiaron. La re-inferencia
-de [05-decisiones](05-decisiones.md) solo aplica a hilos nuevos o modificados; nunca
-sobrescribe una decisión manual. Los archivos del PR (`pr_files`, derivables
-íntegramente de la API) pueden seguir con replace-all.
+**Proposal.** Reconcile incoming threads against existing ones by their stable GitHub id:
+insert new ones, update changed ones (content hash: finding, replies, path, line), keep
+unchanged ones intact. Re-inference from [05-decisions](05-decisions.md) only applies to new
+or changed threads; it never overwrites a manual decision. PR files (`pr_files`, fully
+derivable from the API) can stay replace-all.
 
-- Entrada: ninguna; también es corrección de la etapa 1.
-- Salida (definition of done): test de idempotencia — indexar dos veces el mismo PR
-  deja el mismo conteo de hilos, comentarios y decisiones; una decisión manual
-  sobrevive al re-indexado de un PR sin cambios; un hilo modificado en GitHub sí se
-  actualiza.
+- Entry: none; also a stage 1 correction.
+- Output (definition of done): idempotency test — indexing the same PR twice leaves the
+  same counts of threads, comments, and decisions; a manual decision survives re-indexing
+  an unchanged PR; a thread changed on GitHub does get updated.
 
-## 3. MCP server (compromiso)
+## 3. MCP server (commitment)
 
-**Problema.** El único punto de entrada hoy es el CLI ([04-cli](04-cli.md)). Los
-consumidores objetivo —Codex, Claude Code, Copilot, Cursor, OpenCode— hablan MCP;
-pedirles invocar un binario .NET acopla cada integración a detalles de instalación y
-de acceso a Postgres.
+**Problem.** The only entry point today is the CLI ([04-cli](04-cli.md)). Target consumers
+—Codex, Claude Code, Copilot, Cursor, OpenCode— speak MCP; asking them to invoke a .NET
+binary couples every integration to installation and Postgres access details.
 
-**Propuesta.** Nuevo proyecto `ReviewMemory.Mcp` sobre transporte stdio con dos
-tools que reutilizan la lógica de Core/Storage sin duplicarla: `search` (query,
-repo opcional, files opcional, limit) y `context` (repo, pr, limit), con los mismos
-parámetros y el mismo JSON de salida que los comandos homónimos del CLI — el
-contrato de [03-recuperacion](03-recuperacion.md) sirve igual para humanos y
-agentes. Sin tools de escritura: la memoria se alimenta con `index`, no desde el
-agente. Distribución como herramienta .NET autocontenida; instrucciones de registro
-por cliente en el README.
+**Proposal.** New project `ReviewMemory.Mcp` over stdio transport with two tools reusing
+Core/Storage logic without duplicating it: `search` (query, optional repo, optional files,
+limit) and `context` (repo, pr, limit), with the same parameters and same JSON output as
+the CLI's homonymous commands — the contract of [03-ranking](03-ranking.md) serves humans
+and agents alike. No write tools: the memory is fed with `index`, not from the agent.
+Distribution as a self-contained .NET tool; registration instructions per client in the
+README.
 
-- Entrada: ninguna.
-- Salida (definition of done): el server registrado en Claude Code u OpenCode
-  ejecuta `search` y `context` contra la BD local de docker-compose; paridad de
-  salida JSON con el CLI verificada por test; error estructurado si no hay BD, sin
-  crash del proceso.
+- Entry: none.
+- Output (definition of done): the server registered in Claude Code or OpenCode runs
+  `search` and `context` against the docker-compose local database; JSON output parity
+  with the CLI verified by test; structured error when there is no DB, no process crash.
 
-## 4. Integración con skills de code review (compromiso)
+## 4. Integration with code review skills (commitment)
 
-**Problema.** Una memoria que nadie consulta no existe. Falta definir en qué momento
-del flujo de review un agente pregunta a ReviewMemory y qué hace con la respuesta.
+**Problem.** A memory nobody consults does not exist. What is missing is defining at which
+point of the review flow an agent asks ReviewMemory and what it does with the answer.
 
-**Propuesta.** Skill que ordena el flujo: ticket → inspección del diff → consulta
-`context` del PR (vía MCP, ítem 3) → review → validación de cada finding contra el
-código actual **y** contra el historial devuelto. Un finding que contradice una
-decisión histórica `rejected` se marca como ya discutido y descartado en vez de
-repetirlo; uno respaldado por una discusión `accepted` gana peso.
+**Proposal.** A skill that orders the flow: ticket → diff inspection → `context` query of
+the PR (via MCP, item 3) → review → validation of each finding against the current code
+**and** against the returned history. A finding contradicting a historical `rejected`
+decision is marked as already discussed and discarded instead of repeated; one backed by
+an `accepted` discussion gains weight.
 
-- Entrada: MCP server disponible (ítem 3).
-- Salida (definition of done): un review guiado por la skill cita discusiones
-  históricas relevantes con su decisión inferida y omite o degrada hallazgos ya
-  descartados por el equipo; la skill queda versionada en este repo.
+- Entry: MCP server available (item 3).
+- Output (definition of done): a review guided by the skill cites relevant historical
+  discussions with their inferred decision and omits or downgrades findings already
+  discarded by the team; the skill stays versioned in this repo.
 
-## 5. Embeddings + pgvector (propuesta)
+## 5. Embeddings + pgvector (proposal)
 
-**Problema.** FTS falla cuando el vocabulario no coincide: "duplicate callback" no
-casa léxicamente con "processed twice", aunque describan el mismo problema. El
-solapamiento de archivos compensa solo si el PR candidato tocó los mismos ficheros.
+**Problem.** FTS fails when vocabulary does not match: "duplicate callback" does not match
+lexically with "processed twice", even though they describe the same problem. File overlap
+compensates only if the candidate PR touched the same files.
 
-**Propuesta.** Segunda señal de similitud: embedding del comentario del reviewer
-calculado en la indexación, búsqueda por coseno con pgvector, combinación lineal con
-las tres señales de etapa 1. Cuándo vale la pena: no por defecto. Construir primero
-un conjunto pequeño de consultas con relevancia conocida sobre repos reales y medir
-el recall@k de FTS puro; implementar solo si ese recall queda bajo un umbral
-acordado. Si FTS rinde, pgvector es infraestructura y migraciones sin retorno
-justificado.
+**Proposal.** Second similarity signal: embedding of the reviewer's comment computed at
+indexing, cosine search with pgvector, linear combination with the three stage 1 signals.
+When it is worth it: not by default. Build first a small set of queries with known relevance
+over real repos and measure plain FTS recall@k; implement only if that recall lands below an
+agreed threshold. If FTS performs, pgvector is infrastructure and migrations without
+justified return.
 
-- Entrada: benchmark de recall@k publicado con números que demuestren el déficit de
-  FTS puro.
-- Salida (definition of done): misma batería antes/después con mejora medida de
-  recall@k sin perder precisión en top-1 más allá del umbral acordado; migración
-  embebida nueva (`schema_migrations`) y ranking documentado en
-  [03-recuperacion](03-recuperacion.md).
+- Entry: recall@k benchmark published with numbers demonstrating plain FTS's deficit.
+- Output (definition of done): same battery before/after with measured recall@k improvement
+  without losing top-1 precision beyond the agreed threshold; new embedded migration
+  (`schema_migrations`) and ranking documented in [03-ranking](03-ranking.md).
 
-## 6. Aprendizaje post-review (propuesta)
+## 6. Post-review learning (proposal)
 
-**Problema.** La inferencia léxica de [05-decisiones](05-decisiones.md) resuelve lo
-evidente y deja `unknown` lo ambiguo; el conocimiento más valioso —qué aceptó o
-descartó el equipo y por qué— vive en la conversación posterior y no vuelve a la
-memoria.
+**Problem.** The lexical inference of [05-decisions](05-decisions.md) resolves the obvious
+and leaves `unknown` what is ambiguous; the most valuable knowledge —what the team accepted
+or discarded and why— lives in the later conversation and never returns to the memory.
 
-**Propuesta.** Cerrar el bucle: tras un review que consumió contexto (ítem 4),
-registrar la respuesta efectiva ante cada hallazgo consultado (aplicado tal cual,
-rechazado con razón, ignorado) y persistirla como decisión manual ligada al hilo
-histórico. Ese corpus alimenta "Team Review Patterns": agregados por archivo, módulo
-y tipo de hallazgo que `context` devuelve junto a los hilos crudos. Depende de los
-ítems 1–2: sin `resolved` real ni re-indexado seguro, lo aprendido se pierde o parte
-de señales falsas.
+**Proposal.** Close the loop: after a review that consumed context (item 4), record the
+effective response to each consulted finding (applied as-is, rejected with reason,
+ignored) and persist it as a manual decision linked to the historical thread. That corpus
+feeds "Team Review Patterns": aggregates per file, module, and finding type that `context`
+returns alongside the raw threads. Depends on items 1–2: without real `resolved` nor safe
+re-indexing, what is learned gets lost or starts from false signals.
 
-- Entrada: ítems 2 y 3 en producción y uso real del flujo del ítem 4 — sin consumo
-  no hay respuestas que aprender.
-- Salida (definition of done): una decisión registrada manualmente aparece en
-  resultados posteriores de `context` con su procedencia, sobrevive al re-indexado,
-  y los patrones agregados aparecen en el JSON de salida documentado.
+- Entry: items 2 and 3 in production and real use of item 4's flow — without consumption
+  there are no responses to learn from.
+- Output (definition of done): a manually recorded decision appears in later `context`
+  results with its provenance, survives re-indexing, and the aggregated patterns appear in
+  the documented JSON output.
 
-## No hacer
+## Not doing
 
-- LLM reviewer propio: la memoria recupera y puntúa historial; juzgar el diff sigue
-  siendo trabajo del agente reviewer (posición de [01-vision](01-vision.md)).
-- UI web mientras CLI y MCP cubran el consumo.
-- Embeddings por defecto sin la medición del ítem 5.
-- Escritura desde agentes consumidores: la memoria la alimentan `index` y el
-  aprendizaje post-review supervisado, nunca las tools de lectura.
+- Own LLM reviewer: the memory retrieves and scores history; judging the diff remains the
+  reviewer agent's job ([01-vision](01-vision.md) position).
+- Web UI while CLI and MCP cover consumption.
+- Default embeddings without item 5's measurement.
+- Writes from consuming agents: the memory is fed by `index` and supervised post-review
+  learning, never by the read tools.

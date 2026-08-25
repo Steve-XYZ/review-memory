@@ -66,7 +66,7 @@ public sealed class DecisionInferrerTests
 
         Assert.Equal(DecisionOutcome.Unknown, decision.Outcome);
         Assert.NotNull(decision.Reason);
-        Assert.Contains("contradictorias", decision.Reason);
+        Assert.Contains("contradictory", decision.Reason);
     }
 
     [Fact]
@@ -106,6 +106,6 @@ public sealed class DecisionInferrerTests
 
         Assert.Equal(DecisionOutcome.Accepted, decision.Outcome);
         Assert.NotNull(decision.Reason);
-        Assert.Contains($"respuesta de dev: \"{body[..119]}…\"", decision.Reason);
+        Assert.Contains($"response from dev: \"{body[..119]}…\"", decision.Reason);
     }
 }

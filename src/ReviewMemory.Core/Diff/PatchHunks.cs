@@ -8,8 +8,8 @@ public static partial class PatchHunks
     private static partial Regex HunkHeader();
 
     /// <summary>
-    /// Parte el patch unificado de un archivo en hunks individuales.
-    /// Devuelve una lista vacía cuando el patch es nulo o no contiene hunks.
+    /// Splits a file's unified patch into individual hunks.
+    /// Returns an empty list when the patch is null or contains no hunks.
     /// </summary>
     public static IReadOnlyList<CodeHunk> Parse(string? patch)
     {

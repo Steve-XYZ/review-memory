@@ -82,7 +82,7 @@ public sealed class StorageIntegrationTests
     }
 
     [Fact]
-    public async Task Reindex_del_mismo_pr_mantiene_conteos_y_hash_estable()
+    public async Task Reindex_same_pr_keeps_counts_and_stable_hash()
     {
         if (ConnectionString is null)
         {
@@ -113,7 +113,7 @@ public sealed class StorageIntegrationTests
     }
 
     [Fact]
-    public async Task Decision_manual_sobrevive_re_index_sin_cambios()
+    public async Task Manual_decision_survives_reindex_without_changes()
     {
         if (ConnectionString is null)
         {
@@ -145,7 +145,7 @@ public sealed class StorageIntegrationTests
     }
 
     [Fact]
-    public async Task Hilo_modificado_se_actualiza_y_decision_se_reinfiere()
+    public async Task Changed_thread_is_updated_and_decision_reinferred()
     {
         if (ConnectionString is null)
         {
@@ -176,7 +176,7 @@ public sealed class StorageIntegrationTests
     }
 
     [Fact]
-    public async Task Migracion_002_aplica_sobre_bd_con_datos_de_001()
+    public async Task Migration_002_applies_over_db_with_001_data()
     {
         if (ConnectionString is null)
         {
@@ -259,7 +259,7 @@ public sealed class StorageIntegrationTests
         const string sql = """
             UPDATE decisions
             SET outcome = 'rejected',
-                reason = 'corrección humana: falso positivo del léxico',
+                reason = 'human correction: lexical false positive',
                 confidence = 'manual'
             WHERE thread_id = @thread_id
             """;
@@ -358,7 +358,7 @@ public sealed class StorageIntegrationTests
             Repo: repo,
             Number: number,
             Title: "Persist resolved flag",
-            Body: "Dos hilos con estados resolved distintos.",
+            Body: "Two threads with different resolved states.",
             Author: "javier",
             State: PrState.Open,
             CreatedAt: DateTimeOffset.UtcNow.AddDays(-5),

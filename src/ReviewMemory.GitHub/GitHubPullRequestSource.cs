@@ -5,15 +5,15 @@ using ReviewMemory.Core;
 namespace ReviewMemory.GitHub;
 
 /// <summary>
-/// Fuente de historial basada en la API REST de GitHub. Reconstruye los
-/// hilos de review agrupando comentarios por su cadena de in_reply_to y
-/// sobrescribe su estado resolved con una consulta GraphQL complementaria.
+/// History source based on the GitHub REST API. Rebuilds review threads
+/// by grouping comments along their in_reply_to chain and overwrites their
+/// resolved state with a complementary GraphQL query.
 ///
-/// La degradación vive aquí (y no en el CLI): ante token ausente o fallo de
-/// GraphQL la fuente continúa con Resolved=false para que el stream de PRs
-/// nunca se aborte, e informa el motivo una sola vez a través del callback
-/// <c>graphQlDegraded</c>; el CLI decide cómo presentarlo (stderr).
-/// Tras el primer fallo no se reintenta en el resto de la corrida.
+/// Degradation lives here (not in the CLI): on missing token or GraphQL
+/// failure the source continues with Resolved=false so the PR stream is
+/// never aborted, and reports the reason once through the
+/// <c>graphQlDegraded</c> callback; the CLI decides how to present it (stderr).
+/// After the first failure it does not retry for the rest of the run.
 /// </summary>
 public sealed class GitHubPullRequestSource : IPullRequestSource
 {
@@ -107,8 +107,8 @@ public sealed class GitHubPullRequestSource : IPullRequestSource
     }
 
     /// <summary>
-    /// Estado resolved vía GraphQL; diccionario vacío si no hay token o la
-    /// consulta falla (motivo reportado una sola vez por el callback).
+    /// Resolved state via GraphQL; empty dictionary when there is no token or the
+    /// query fails (reason reported once through the callback).
     /// </summary>
     internal async Task<IReadOnlyDictionary<long, bool>> ResolvedStatesOrEmptyAsync(
         string owner, string name, int number, CancellationToken cancellationToken = default)
@@ -120,7 +120,7 @@ public sealed class GitHubPullRequestSource : IPullRequestSource
 
         if (_graphQl is null)
         {
-            ReportDegradation("no hay token de GitHub (--token o GITHUB_TOKEN)");
+            ReportDegradation("no GitHub token (--token or GITHUB_TOKEN)");
             return NoResolvedStates;
         }
 

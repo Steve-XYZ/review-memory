@@ -155,7 +155,7 @@ Every thread carries an **inferred decision** (`accepted` / `rejected` / `partia
 - [x] GitHub REST ingestion: PRs, files, hunks, comments grouped into threads
 - [x] FTS + overlap + recency search; `context` command excluding the PR itself
 - [x] CI (build + tests against real Postgres)
-- [ ] Specs in `docs/specs/`
+- [x] Specs in `docs/specs/`
 - [x] Thread "resolved" state via GraphQL (degrades without breaking indexing)
 - [x] Incremental re-indexing by content hash
 - [x] stdio MCP server with `search` and `context` tools, JSON parity with the CLI

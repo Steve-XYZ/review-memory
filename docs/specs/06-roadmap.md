@@ -9,14 +9,14 @@ and durability of the data already indexed, then take it to where reviewers work
 Each item marks whether it is a **commitment** (agreed work for this stage) or a
 **proposal** (executed when its entry criterion is met). Priority order:
 
-1. `resolved` state via GraphQL — cheap correction of false data persisted today.
-2. Incremental re-indexing — avoids destroying owned state on every `index` run.
-3. MCP server — distribution: without it, the memory only reaches whoever has the CLI.
-4. Integration with review skills — real consumption of item 3 in the workflow.
+1. `resolved` state via GraphQL — cheap correction of false data persisted today. (shipped)
+2. Incremental re-indexing — avoids destroying owned state on every `index` run. (shipped)
+3. MCP server — distribution: without it, the memory only reaches whoever has the CLI. (shipped)
+4. Integration with review skills — real consumption of item 3 in the workflow. (shipped)
 5. Embeddings + pgvector — only if measurement proves plain FTS falls short.
 6. Post-review learning — depends on 1, 2 (correct data) and 4 (real consumption).
 
-## 1. Resolved state via GraphQL (commitment)
+## 1. Resolved state via GraphQL (commitment, shipped)
 
 **Problem.** GitHub's REST API does not expose the resolved state of review threads;
 `GitHubPullRequestSource` reconstructs threads by grouping comments along their
@@ -26,9 +26,11 @@ column stores noise and [05-decisions](05-decisions.md) infers over an always-fa
 signal — a thread discussed and discarded by the team looks the same as an open
 unanswered one.
 
-**Proposal.** A complementary GraphQL query after loading the PR via REST:
-`pullRequest.reviewThreads { id isResolved isOutdated }`, mapping `thread id → isResolved`,
-and overwriting `Resolved` before persisting. REST remains the source of comments and
+**Proposal** (shipped). A complementary GraphQL query after loading the PR via REST:
+`pullRequest.reviewThreads { isResolved comments(first: 1) { nodes { databaseId } } }`,
+resolving each thread by its root comment's `databaseId` to its `isResolved`
+(the opaque GraphQL node id does not match ReviewMemory's thread identity), and
+overwriting `Resolved` before persisting. REST remains the source of comments and
 pagination; GraphQL contributes only the flag. If the query fails, degrade to current
 behavior with a stderr warning and exit 0.
 
@@ -37,7 +39,7 @@ behavior with a stderr warning and exit 0.
   `resolved = true` for those threads (test against a GraphQL fixture); GraphQL failure
   degrades without breaking indexing.
 
-## 2. Incremental re-indexing (commitment)
+## 2. Incremental re-indexing (commitment, shipped)
 
 **Problem.** `IndexRepository.UpsertAsync` deletes and recreates all of the PR's threads on
 every pass (`DeleteThreadsAsync`, `src/ReviewMemory.Storage/IndexRepository.cs`).
@@ -57,7 +59,7 @@ derivable from the API) can stay replace-all.
   same counts of threads, comments, and decisions; a manual decision survives re-indexing
   an unchanged PR; a thread changed on GitHub does get updated.
 
-## 3. MCP server (commitment)
+## 3. MCP server (commitment, shipped)
 
 **Problem.** The only entry point today is the CLI ([04-cli](04-cli.md)). Target consumers
 —Codex, Claude Code, Copilot, Cursor, OpenCode— speak MCP; asking them to invoke a .NET
@@ -76,7 +78,7 @@ README.
   `search` and `context` against the docker-compose local database; JSON output parity
   with the CLI verified by test; structured error when there is no DB, no process crash.
 
-## 4. Integration with code review skills (commitment)
+## 4. Integration with code review skills (commitment, shipped)
 
 **Problem.** A memory nobody consults does not exist. What is missing is defining at which
 point of the review flow an agent asks ReviewMemory and what it does with the answer.

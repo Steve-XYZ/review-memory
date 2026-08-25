@@ -84,7 +84,7 @@ Validations that produce exit 2, with their literal message:
 | Command | Condition | Message (stderr) |
 |---|---|---|
 | `index`, `context` | `repo` is not `owner/name` (two non-empty segments) | `error: repository must be in owner/name format` |
-| `search`, `context` | `--format` other than `console`/`json` | `error: unknown --format '<value>' (console|json)` |
+| `search`, `context` | `--format` other than `console`/`json` | `error: unknown --format '<value>' (console\|json)` |
 | `search` | empty `query` AND no usable `--files` | `error: search requires text or --files` |
 | `context` | The PR is not in the memory | `error: PR <owner>/<name>#<n> is not indexed; run 'reviewmemory index' first` |
 

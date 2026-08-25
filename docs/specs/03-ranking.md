@@ -79,7 +79,7 @@ with `age_in_days = max(seconds_since_created_at / 86400, 0)` (the `GREATEST` pr
 | 120 days | ≈ 0.368 |
 | 240 days | ≈ 0.135 |
 
-Note: the constant is named `RecencyHalfLifeDays` and equals 120.0, but mathematically it is the exponent's divisor (time constant), not the half-life: the score actually halves at `120·ln 2 ≈ 83` days. The README says "120-day half-life"; the code does the above.
+Note: the constant is named `RecencyHalfLifeDays` and equals 120.0, but mathematically it is the exponent's divisor (time constant), not the half-life: the score actually halves at `120·ln 2 ≈ 83` days. The name is historical; treat 120 as the time constant.
 
 ### Full example
 

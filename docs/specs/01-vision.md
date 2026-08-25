@@ -41,7 +41,7 @@ Not another AI reviewer. The memory is the product; the LLM reviewer is not.
 | Moat | none: replaced by the next model | cumulative: grows with every review |
 | Criterion | generic prompt rules | this team's real decisions |
 
-It is deliberately reviewer-agnostic: it works the same for a person, for Codex, for Claude, or for Copilot. Today it integrates via CLI (`--format json` for agents); later, via MCP server (spec 06-roadmap).
+It is deliberately reviewer-agnostic: it works the same for a person, for Codex, for Claude, or for Copilot. Today it integrates via CLI (`--format json` for agents) and via MCP server (spec 06-roadmap).
 
 ## What it does NOT do
 
